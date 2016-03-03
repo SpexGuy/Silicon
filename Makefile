@@ -11,14 +11,14 @@ CCC = g++
 # Compiler options                                                              
 # ---------------------------------------------------------------------         
 
-CCOPT = -I ./include -L ./lib -m64 -O -fPIC -fexceptions -DNDEBUG -DIL_STD -g -Wall
+CCOPT = -I ./include -L ./lib -m64 -O -fPIC -fexceptions -DNDEBUG -DIL_STD -g -Wall -std=c++11
 
 # ---------------------------------------------------------------------         
 # Link options and libraries                                                    
 # ---------------------------------------------------------------------         
 
 CCFLAGS = $(CCOPT) 
-CCLNFLAGS = -lm -pthread -lboost_filesystem
+CCLNFLAGS = -lm -pthread -lboost_system -lboost_filesystem
 
 #------------------------------------------------------------                   
 #  make all      : to compile.                                     
