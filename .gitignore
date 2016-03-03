@@ -10,5 +10,8 @@ lib/
 **/doc
 **/test
 **/b2
+**/bjam
+**/project-config.jam*
+**/jam0
 **/example
 **/bin.v2
