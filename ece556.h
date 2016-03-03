@@ -105,17 +105,6 @@ int solveRouting(routingInst *rst);
    output: 1 if successful, 0 otherwise 
   */
   int writeOutput(const char *outRouteFile, routingInst *rst);
-  
-  /* int release(routingInst *rst)
-     Release the memory for all the allocated data structures. 
-     Failure to release may cause memory problems after multiple runs of your program. 
-     Need to recursively delete all memory allocations from bottom to top 
-     (starting from segments then routes then individual fields within a net struct, 
-     then nets, then the fields in a routing instance, and finally the routing instance)
-
-     output: 1 if successful, 0 otherwise 
-  */
- int release(routingInst *rst);
 
 
 #endif // ECE556_H

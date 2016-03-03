@@ -34,7 +34,6 @@ int main(int argc, char **argv)
  	status = solveRouting(rst);
  	if(status==0){
  		printf("ERROR: running routing (%d)\n", status);
- 		release(rst);
  		return 1;
  	}
 	
@@ -42,11 +41,9 @@ int main(int argc, char **argv)
  	status = writeOutput(outputFileName, rst);
  	if(status==0){
  		printf("ERROR: writing the result (%d)\n", status);
- 		release(rst);
  		return 1;
  	}
 
- 	release(rst);
- 	printf("\nDONE!\n");	
+ 	printf("\nDONE!\n");
  	return 0;
 }
