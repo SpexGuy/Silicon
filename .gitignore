@@ -6,3 +6,8 @@
 *.log
 include/
 lib/
+**/doc
+**/test
+**/b2
+**/example
+**/bin.v2
