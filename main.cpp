@@ -21,24 +21,24 @@ int main(int argc, char **argv)
  	char *outputFileName = argv[2];
 
  	/// create a new routing instance
- 	routingInst *rst = new routingInst;
+ 	routingInst rst;
 	
  	/// read benchmark
- 	status = readBenchmark(inputFileName, rst);
+ 	status = readBenchmark(inputFileName, &rst);
  	if(status==0){
  		printf("ERROR: reading input file (%d)\n", status);
  		return 1;
  	}
 	
  	/// run actual routing
- 	status = solveRouting(rst);
+ 	status = solveRouting(&rst);
  	if(status==0){
  		printf("ERROR: running routing (%d)\n", status);
  		return 1;
  	}
 	
  	/// write the result
- 	status = writeOutput(outputFileName, rst);
+ 	status = writeOutput(outputFileName, &rst);
  	if(status==0){
  		printf("ERROR: writing the result (%d)\n", status);
  		return 1;
