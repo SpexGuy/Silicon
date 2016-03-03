@@ -4,76 +4,73 @@
 #ifndef ECE556_H
 #define ECE556_H
 
-#include <stdio.h>
+#include <iostream>
 
- /**
-  * A structure to represent a 2D Point. 
-  */
- typedef struct
- {
-   int x ; /* x coordinate ( >=0 in the routing grid)*/
-   int y ; /* y coordinate ( >=0 in the routing grid)*/
-
- } point ;
+/**
+ * A structure to represent a 2D Point.
+ */
+struct Point {
+    int x; /* x coordinate ( >=0 in the routing grid)*/
+    int y; /* y coordinate ( >=0 in the routing grid)*/
+};
 
 
-  /**
-  * A structure to represent a segment
-  */
- typedef struct
- {
-   point p1 ; 	/* start point of a segment */
-   point p2 ; 	/* end point of a segment */
-   
-   int numEdges ; 	/* number of edges in the segment*/
-   int *edges ;  	/* array of edges representing the segment*/
-   
- } segment ;
- 
- 
-  /**
-  * A structure to represent a route
-  */
-  typedef struct
-  {
+/**
+ * A structure to represent a segment
+ */
+struct Segment {
+    Point p1 ; 	/* start point of a segment */
+    Point p2 ; 	/* end point of a segment */
+
+    int numEdges ; 	/* number of edges in the segment*/
+    int *edges ;  	/* array of edges representing the segment*/
+};
+
+
+/**
+ * A structure to represent a route
+ */
+struct Route {
     int numSegs ;  	/* number of segments in a route*/
-    segment *segments ;  /* an array of segments (note, a segment may be flat, L-shaped or any other shape, based on your preference */
+    Segment *segments ;  /* an array of segments (note, a segment may be flat, L-shaped or any other shape, based on your preference */
+};
 
-  } route ;
- 
- 
-  /**
-  * A structure to represent nets
-  */
-  typedef struct
-  {
 
-   int id ; 		/* ID of the net */
-   int numPins ; 		/* number of pins (or terminals) of the net */
-   point *pins ; 		/* array of pins (or terminals) of the net. */
-   route nroute ;		/* stored route for the net. */
+/**
+ * A structure to represent nets
+ */
+struct Net {
+    int id ; 		    /* ID of the net */
+    int numPins ; 		/* number of pins (or terminals) of the net */
+    Point *pins ; 		/* array of pins (or terminals) of the net. */
+    Route nroute ;		/* stored route for the net. */
+};
 
-  } net ;
-  
-  /**
-  * A structure to represent the routing instance
-  */
-  typedef struct
-  {
-   int gx ;		/* x dimension of the global routing grid */
-   int gy ;		/* y dimension of the global routing grid */
-   
-   int cap ;
-   
-   int numNets ;	/* number of nets */
-   net *nets ;		/* array of nets */
-   
-   int numEdges ; 	/* number of edges of the grid */
-   int *edgeCaps; 	/* array of the actual edge capacities after considering for blockages */
-   int *edgeUtils;	/* array of edge utilizations */  
-   
-  } routingInst ;
-  
+struct Edge {
+    int capacity;
+    int utilization;
+};
+
+struct Cell {
+    Edge right;
+    Edge down;
+};
+
+/**
+ * A structure to represent the routing instance
+ */
+struct RoutingInst {
+    int gx ;		/* x dimension of the global routing grid */
+    int gy ;		/* y dimension of the global routing grid */
+
+    int cap ;
+
+    int numNets;	/* number of nets */
+    Net *nets;		/* array of nets */
+
+    int numCells; 	/* number of cells in the grid */
+    Cell *cells;
+};
 
 /* int readBenchmark(const char *fileName, routingInst *rst)
    Read in the benchmark file and initialize the routing instance.
@@ -82,16 +79,16 @@
    input2: pointer to the routing instance
    output: 1 if successful
 */
-int readBenchmark(const char *fileName, routingInst *rst);
+int readBenchmark(std::istream &in, RoutingInst &rst);
 
-  
+
 /* int solveRouting(routingInst *rst)
    This function creates a routing solution
    input: pointer to the routing instance
    output: 1 if successful, 0 otherwise (e.g. the data structures are not populated) 
 */
-int solveRouting(routingInst *rst);
-  
+int solveRouting(RoutingInst &rst);
+
 /* int writeOutput(const char *outRouteFile, routingInst *rst)
    Write the routing solution obtained from solveRouting(). 
    Refer to the project link for the required output format.
@@ -104,8 +101,7 @@ int solveRouting(routingInst *rst);
    input2: pointer to the routing instance
    output: 1 if successful, 0 otherwise 
   */
-  int writeOutput(const char *outRouteFile, routingInst *rst);
+int writeOutput(std::ostream &out, RoutingInst &rst);
 
 
 #endif // ECE556_H
-
