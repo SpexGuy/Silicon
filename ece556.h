@@ -40,7 +40,7 @@ struct Route {
  * A structure to represent nets
  */
 struct Net {
-    int id ; 		    /* ID of the net */
+    int id ; 		    /* ID of the net */ // TODO: is this really necessary?
     int numPins ; 		/* number of pins (or terminals) of the net */
     Point *pins ; 		/* array of pins (or terminals) of the net. */
     Route nroute ;		/* stored route for the net. */
