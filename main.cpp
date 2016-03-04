@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 {
     boost::filesystem::path full_path( boost::filesystem::current_path() );
     std::cout << "Hangin' in " << full_path << std::endl;
-    std::cout << "main.cpp size: " << boost::filesystem::file_size("main.cpp") << std::endl;
+    std::cout << "adaptec1.gr size: " << boost::filesystem::file_size("adaptec1.gr") << std::endl;
 
     if(argc!=3){
         printf("Usage : %s <input_benchmark_name> <output_file_name> \n", argv[0]);
@@ -32,7 +32,7 @@ int main(int argc, char **argv)
 	/// Read in the benchmark
     // resource cage for in:
     {   ifstream in(inputFileName);
-        if (in.good()) {
+        if (!in) {
             cout << "Couldn't read from file " << inputFileName << endl;
             exit(1);
         }
