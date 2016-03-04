@@ -12,7 +12,15 @@
 struct Point {
     int x; /* x coordinate ( >=0 in the routing grid)*/
     int y; /* y coordinate ( >=0 in the routing grid)*/
+
+    inline bool operator==(const Point &other) const {
+        return x == other.x && y == other.y;
+    }
 };
+
+inline std::ostream &operator<<(std::ostream &out, const Point &p) {
+    return out << '(' << p.x << ',' << p.y << ')';
+}
 
 
 /**
@@ -24,7 +32,15 @@ struct Segment {
 
     int numEdges ; 	/* number of edges in the segment*/
     int *edges ;  	/* array of edges representing the segment*/
+
+    inline bool empty() {
+        return p1 == p2;
+    }
 };
+
+inline std::ostream &operator<<(std::ostream &out, const Segment &s) {
+    return out << s.p1 << '-' << s.p2;
+}
 
 
 /**

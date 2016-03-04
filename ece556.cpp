@@ -188,8 +188,14 @@ int solveRouting(RoutingInst &rst){
 }
 
 int writeOutput(ostream &out, RoutingInst &rst){
-    /*********** TO BE FILLED BY YOU **********/
-
+    for (int n = 0; n < rst.numNets; n++) {
+        out << 'n' << n << endl;
+        for (int c = 0; c < rst.nets[n].nroute.numSegs; c++) {
+            if (rst.nets[n].nroute.segments[c].empty()) continue;
+            out << rst.nets[n].nroute.segments[c] << endl;
+        }
+        out << '!' << endl;
+    }
     return 1;
 }
 
