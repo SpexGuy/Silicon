@@ -16,3 +16,6 @@ lib/
 **/example
 **/bin.v2
 *.nets
+*.html
+visualize
+
