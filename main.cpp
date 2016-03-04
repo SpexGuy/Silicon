@@ -39,7 +39,7 @@ int main(int argc, char **argv)
 		clock_t time = clock();
         status = readBenchmark(in, rst);
         if (status == 0) {
-            printf("ERROR: reading input file (%d)\n", status);
+            printf("ERROR: reading input file \n");
             exit(1);
         }
 		clock_t dt = clock() - time;
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     /// Run actual routing
     status = solveRouting(rst);
     if(status==0){
-        printf("ERROR: running routing (%d)\n", status);
+        printf("ERROR: running routing \n");
         exit(1);
     }
 
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
 		}
 		status = writeOutput(out, rst);
 		if(status==0){
-			printf("ERROR: writing the result (%d)\n", status);
+			printf("ERROR: writing the result \n");
 			exit(1);
 		}
     }
