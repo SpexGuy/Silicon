@@ -40,21 +40,15 @@ void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
     }
 }
 
-inline int idx(const RoutingInst &inst, const int x, const int y) {
-    // naive row-major scheme for now...
-    // TODO: morton curve or something better for traversing
-    return y * inst.gx + x;
-}
-
 inline void apply_blockage(RoutingInst &inst, int x, int y, int ex, int ey, int new_cap) {
     if (x == ex) { // vertical
         for (; y < ey; y++) {
-            inst.cells[idx(inst,x,y)].down.capacity = new_cap;
+            inst.cell(x, y).down.capacity = new_cap;
         }
     } else {
         assert(y == ey);
         for (; x < ex; x++) {
-            inst.cells[idx(inst,x,y)].right.capacity = new_cap;
+            inst.cell(x, y).right.capacity = new_cap;
         }
     }
 }

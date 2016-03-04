@@ -70,6 +70,15 @@ struct RoutingInst {
 
     int numCells; 	/* number of cells in the grid */
     Cell *cells;
+
+    inline int index(const int x, const int y) {
+        // naive row-major scheme for now...
+        // TODO: morton curve or something better for traversing
+        return y * gx + x;
+    }
+    inline Cell &cell(const int x, const int y) {
+        return cells[index(x, y)];
+    }
 };
 
 /* int readBenchmark(const char *fileName, routingInst *rst)

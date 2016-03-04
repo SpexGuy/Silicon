@@ -33,14 +33,17 @@ int main(int argc, char **argv)
     // resource cage for in:
     {   ifstream in(inputFileName);
         if (!in) {
-            cout << "Couldn't read from file " << inputFileName << endl;
+            cerr << "Couldn't read from file " << inputFileName << endl;
             exit(1);
         }
+		clock_t time = clock();
         status = readBenchmark(in, rst);
         if (status == 0) {
             printf("ERROR: reading input file (%d)\n", status);
             exit(1);
         }
+		clock_t dt = clock() - time;
+		cout << "Read " << rst.numNets << " nets into " << rst.numCells << " cells in " << (dt * 1000)/CLOCKS_PER_SEC << " ms.";
     }
 
     /// Run actual routing
@@ -53,7 +56,7 @@ int main(int argc, char **argv)
     /// Write the result
     // resource cage for out
     {	ofstream out(outputFileName);
-		if (!out.good()) {
+		if (!out) {
 			cerr << "Couldn't write to " << outputFileName << endl;
 			exit(1);
 		}

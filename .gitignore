@@ -15,3 +15,4 @@ lib/
 **/jam0
 **/example
 **/bin.v2
+*.nets
