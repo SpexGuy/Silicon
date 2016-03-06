@@ -158,31 +158,26 @@ int solveRouting(RoutingInst &rst){
     for (int n = 0; n < rst.numNets; n++) {
         if (rst.nets[n].numPins < 2)  continue;
 
-        rst.nets[n].nroute.numSegs = rst.nets[n].numPins;
+        rst.nets[n].nroute.numSegs = (rst.nets[n].numPins-1)*2;
         rst.nets[n].nroute.segments = new Segment[rst.nets[n].nroute.numSegs];
 
         // We're going to build a spine from the first point.
         Point &first = rst.nets[n].pins[0];
-        int maxY = first.y;
-        int minY = first.y;
 
         // for each pin besides the first, make a branch off of the spine
         for (int c = 1; c < rst.nets[n].numPins; c++) {
-            int minX = std::min(first.x, rst.nets[n].pins[c].x);
-            int maxX = std::max(first.x, rst.nets[n].pins[c].x);
-            int y = rst.nets[n].pins[c].y;
+            Point &pin = rst.nets[n].pins[c];
+            int minY = std::min(pin.y, first.y);
+            int maxY = std::max(pin.y, first.y);
+            rst.nets[n].nroute.segments[(c-1)*2].p1 = Point{pin.x, minY};
+            rst.nets[n].nroute.segments[(c-1)*2].p2 = Point{pin.x, maxY};
 
-            rst.nets[n].nroute.segments[c].p1 = Point{minX, y};
-            rst.nets[n].nroute.segments[c].p2 = Point{maxX, y};
-
-            // also make note of the upper and lower bound for the spine
-            minY = std::min(minY, y);
-            maxY = std::max(maxY, y);
+            int minX = std::min(pin.x, first.x);
+            int maxX = std::max(pin.x, first.x);
+            rst.nets[n].nroute.segments[c*2-1].p1 = Point{minX, first.y};
+            rst.nets[n].nroute.segments[c*2-1].p2 = Point{maxX, first.y};
         }
 
-        // finally, add the spine.
-        rst.nets[n].nroute.segments[0].p1 = Point{first.x, minY};
-        rst.nets[n].nroute.segments[0].p2 = Point{first.x, maxY};
     }
     return 1;
 }
