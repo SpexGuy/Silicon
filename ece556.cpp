@@ -33,9 +33,7 @@ void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
 
     // initialize grid cells with cap.
     for (int c = 0; c < inst.numCells; c++) {
-        inst.cells[c].right.capacity = cap;
         inst.cells[c].right.utilization = 0;
-        inst.cells[c].down.capacity = cap;
         inst.cells[c].down.utilization = 0;
     }
 }
@@ -43,12 +41,12 @@ void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
 inline void apply_blockage(RoutingInst &inst, int x, int y, int ex, int ey, int new_cap) {
     if (x == ex) { // vertical
         for (; y < ey; y++) {
-            inst.cell(x, y).down.capacity = new_cap;
+            inst.cell(x, y).down.utilization = inst.cap - new_cap;
         }
     } else {
         assert(y == ey);
         for (; x < ex; x++) {
-            inst.cell(x, y).right.capacity = new_cap;
+            inst.cell(x, y).right.utilization = inst.cap - new_cap;
         }
     }
 }
@@ -145,12 +143,12 @@ int solveRouting(RoutingInst &rst){
     //
     //                      1
     //                      |
-    //        2-------------|
-    //                      |-----------3
+    //        2------------||
+    //                     |||----------3
     //                      0
-    //                      |
-    //                      |
-    //       6---5==========|-----------4
+    //                    ||||
+    //                    ||||
+    //       6---5========||||----------4
     //                      |
     //                      |
     //                7-----|

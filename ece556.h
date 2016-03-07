@@ -63,7 +63,6 @@ struct Net {
 };
 
 struct Edge {
-    int capacity;
     int utilization;
 };
 
@@ -96,6 +95,10 @@ struct RoutingInst {
         return cells[index(x, y)];
     }
 };
+
+inline float usage(const RoutingInst &inst, const Edge &edge) {
+    return float(edge.utilization) / float(inst.cap);
+}
 
 /* int readBenchmark(const char *fileName, routingInst *rst)
    Read in the benchmark file and initialize the routing instance.
