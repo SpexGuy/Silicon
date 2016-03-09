@@ -13,9 +13,6 @@ using std::endl;
 
 int main(int argc, char **argv)
 {
-    boost::filesystem::path full_path( boost::filesystem::current_path() );
-    std::cout << "Hangin' in " << full_path << std::endl;
-    std::cout << "adaptec1.gr size: " << boost::filesystem::file_size("adaptec1.gr") << std::endl;
 
     if(argc!=3){
         printf("Usage : %s <input_benchmark_name> <output_file_name> \n", argv[0]);
