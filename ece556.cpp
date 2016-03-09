@@ -59,7 +59,6 @@ int fail(const char *msg) {
 int readBenchmark(istream &in, RoutingInst &rst) {
     if (!in) return fail("Bad input stream");
 
-    int linenum = -1;
     string line;
     string token;
 

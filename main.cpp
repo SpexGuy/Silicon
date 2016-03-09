@@ -1,7 +1,7 @@
 // ECE556 - Copyright 2014 University of Wisconsin-Madison.  All Rights Reserved.
 
-#include <boost/filesystem.hpp>
 #include <iostream>
+#include <fstream>
 
 #include "ece556.h"
 
