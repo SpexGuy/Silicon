@@ -18,4 +18,6 @@ lib/
 *.nets
 *.html
 visualize
-
+flute-ckt
+flute-net
+rand-pts

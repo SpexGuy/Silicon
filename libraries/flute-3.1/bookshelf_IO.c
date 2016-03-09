@@ -108,7 +108,6 @@ Iowa State University Research Foundation, Inc.
 
 /*-- functions --*/
     void createHash(char benchmarkPath[], char nodesFile[]);
-    inline uint32_t get_hashfunc(const void *key, size_t length, uint32_t initval);
     void freeHash();
     void readAuxFile(char benchmarkPath[], char auxFile[]);
     inline long getIndex(char temp[]);
@@ -119,6 +118,67 @@ Iowa State University Research Foundation, Inc.
     void readWtsFile(char benchmarkPath[], char wtsFile[], int net_weights);
     void writePlFile(char outputDir[], char fileName[], float xCoord[], float yCoord[], 
                      int totalNodes);
+
+
+/* -----------------------------------------------------------------------
+  hash function generator
+  
+  By Bob Jenkins, 2006.  bob_jenkins@burtleburtle.net.  You may use this
+  code any way you wish, private, educational, or commercial.  It's free.
+  http://burtleburtle.net/bob/hash/doobs.html
+----------------------------------------------------------------------- */
+uint32_t get_hashfunc(const void *key, size_t length, uint32_t initval)
+{
+  uint32_t a,b,c;       // internal state
+  
+  
+  // Set up the internal state
+  a = b = c = 0xdeadbeef + ((uint32_t)length) + initval;
+  
+  // need to read the key one byte at a time
+  const uint8_t *k = (const uint8_t *)key;
+  
+  // all but the last block: affect some 32 bits of (a,b,c)
+  while (length > 12) {
+      a += k[0];
+      a += ((uint32_t)k[1])<<8;
+      a += ((uint32_t)k[2])<<16;
+      a += ((uint32_t)k[3])<<24;
+      b += k[4];
+      b += ((uint32_t)k[5])<<8;
+      b += ((uint32_t)k[6])<<16;
+      b += ((uint32_t)k[7])<<24;
+      c += k[8];
+      c += ((uint32_t)k[9])<<8;
+      c += ((uint32_t)k[10])<<16;
+      c += ((uint32_t)k[11])<<24;
+      mix(a,b,c);
+      length -= 12;
+      k += 12;
+  }
+  
+  // last block: affect all 32 bits of (c)
+  switch(length) {                     // all the case statements fall through
+      case 12: c+=((uint32_t)k[11])<<24;
+      case 11: c+=((uint32_t)k[10])<<16;
+      case 10: c+=((uint32_t)k[9])<<8;
+      case 9 : c+=k[8];
+      case 8 : b+=((uint32_t)k[7])<<24;
+      case 7 : b+=((uint32_t)k[6])<<16;
+      case 6 : b+=((uint32_t)k[5])<<8;
+      case 5 : b+=k[4];
+      case 4 : a+=((uint32_t)k[3])<<24;
+      case 3 : a+=((uint32_t)k[2])<<16;
+      case 2 : a+=((uint32_t)k[1])<<8;
+      case 1 : a+=k[0];
+               break;
+      case 0 : return c;
+  }
+  
+  final(a,b,c);
+  
+  return c;
+}
 
 
 /* -----------------------------------------------------------
@@ -311,66 +371,6 @@ void createHash(char benchmarkPath[], char nodesFile[])
     }
 }
 
-
-/* -----------------------------------------------------------------------
-  hash function generator
-  
-  By Bob Jenkins, 2006.  bob_jenkins@burtleburtle.net.  You may use this
-  code any way you wish, private, educational, or commercial.  It's free.
-  http://burtleburtle.net/bob/hash/doobs.html
------------------------------------------------------------------------ */
-inline uint32_t get_hashfunc(const void *key, size_t length, uint32_t initval)
-{
-  uint32_t a,b,c;       // internal state
-  
-  
-  // Set up the internal state
-  a = b = c = 0xdeadbeef + ((uint32_t)length) + initval;
-  
-  // need to read the key one byte at a time
-  const uint8_t *k = (const uint8_t *)key;
-  
-  // all but the last block: affect some 32 bits of (a,b,c)
-  while (length > 12) {
-      a += k[0];
-      a += ((uint32_t)k[1])<<8;
-      a += ((uint32_t)k[2])<<16;
-      a += ((uint32_t)k[3])<<24;
-      b += k[4];
-      b += ((uint32_t)k[5])<<8;
-      b += ((uint32_t)k[6])<<16;
-      b += ((uint32_t)k[7])<<24;
-      c += k[8];
-      c += ((uint32_t)k[9])<<8;
-      c += ((uint32_t)k[10])<<16;
-      c += ((uint32_t)k[11])<<24;
-      mix(a,b,c);
-      length -= 12;
-      k += 12;
-  }
-  
-  // last block: affect all 32 bits of (c)
-  switch(length) {                     // all the case statements fall through
-      case 12: c+=((uint32_t)k[11])<<24;
-      case 11: c+=((uint32_t)k[10])<<16;
-      case 10: c+=((uint32_t)k[9])<<8;
-      case 9 : c+=k[8];
-      case 8 : b+=((uint32_t)k[7])<<24;
-      case 7 : b+=((uint32_t)k[6])<<16;
-      case 6 : b+=((uint32_t)k[5])<<8;
-      case 5 : b+=k[4];
-      case 4 : a+=((uint32_t)k[3])<<24;
-      case 3 : a+=((uint32_t)k[2])<<16;
-      case 2 : a+=((uint32_t)k[1])<<8;
-      case 1 : a+=k[0];
-               break;
-      case 0 : return c;
-  }
-  
-  final(a,b,c);
-  
-  return c;
-}
 
     
 /* -----------------------------------------------------------
