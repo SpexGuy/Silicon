@@ -18,7 +18,7 @@ CCOPT = -I ./include -L ./lib -m64 -O -fPIC -fexceptions -DNDEBUG -DIL_STD -g -W
 # ---------------------------------------------------------------------         
 
 CCFLAGS = $(CCOPT) 
-CCLNFLAGS = -lm -pthread -lboost_system -lboost_filesystem
+CCLNFLAGS = -lm -pthreads -lboost_system -lboost_filesystem
 
 #------------------------------------------------------------                   
 #  make all      : to compile.                                     
@@ -59,6 +59,7 @@ include/flute:
 	rm -rf include/flute/
 	mkdir include/flute/
 	cp libraries/flute-3.1/*.h include/flute/
+	cp libraries/flute-3.1/*.dat .
 
 
 clean:

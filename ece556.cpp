@@ -4,6 +4,10 @@
 #include <sstream>
 #include <assert.h>
 
+extern "C" {
+    #include <flute/flute.h>
+}
+
 #include "ece556.h"
 
 using std::string;
@@ -132,6 +136,8 @@ int readBenchmark(istream &in, RoutingInst &rst) {
         apply_blockage(rst, x1, y1, x2, y2, new_cap);
     }
 
+    readLUT(); // setup FLUTE
+
     return 1;
 }
 
@@ -153,30 +159,82 @@ int solveRouting(RoutingInst &rst){
     //                      |
     //                7-----|
     //
+
+    int xs[MAXD*2];
+    int *ys = xs + MAXD;
+
     for (int n = 0; n < rst.numNets; n++) {
-        if (rst.nets[n].numPins < 2)  continue;
+//        if (rst.nets[n].numPins < 2)  continue;
+//
+//        rst.nets[n].nroute.numSegs = (rst.nets[n].numPins-1)*2;
+//        rst.nets[n].nroute.segments = new Segment[rst.nets[n].nroute.numSegs];
+//
+//        // We're going to build a spine from the first point.
+//        Point &first = rst.nets[n].pins[0];
+//
+//        // for each pin besides the first, make a branch off of the spine
+//        for (int c = 1; c < rst.nets[n].numPins; c++) {
+//            Point &pin = rst.nets[n].pins[c];
+//            int minY =
+//                    min(pin.y, first.y);
+//            int maxY = max(pin.y, first.y);
+//            rst.nets[n].nroute.segments[(c-1)*2].p1 = Point{pin.x, minY};
+//            rst.nets[n].nroute.segments[(c-1)*2].p2 = Point{pin.x, maxY};
+//
+//            int minX = min(pin.x, first.x);
+//            int maxX = max(pin.x, first.x);
+//            rst.nets[n].nroute.segments[c*2-1].p1 = Point{minX, first.y};
+//            rst.nets[n].nroute.segments[c*2-1].p2 = Point{maxX, first.y};
+//        }
 
-        rst.nets[n].nroute.numSegs = (rst.nets[n].numPins-1)*2;
-        rst.nets[n].nroute.segments = new Segment[rst.nets[n].nroute.numSegs];
-
-        // We're going to build a spine from the first point.
-        Point &first = rst.nets[n].pins[0];
-
-        // for each pin besides the first, make a branch off of the spine
-        for (int c = 1; c < rst.nets[n].numPins; c++) {
-            Point &pin = rst.nets[n].pins[c];
-            int minY = std::min(pin.y, first.y);
-            int maxY = std::max(pin.y, first.y);
-            rst.nets[n].nroute.segments[(c-1)*2].p1 = Point{pin.x, minY};
-            rst.nets[n].nroute.segments[(c-1)*2].p2 = Point{pin.x, maxY};
-
-            int minX = std::min(pin.x, first.x);
-            int maxX = std::max(pin.x, first.x);
-            rst.nets[n].nroute.segments[c*2-1].p1 = Point{minX, first.y};
-            rst.nets[n].nroute.segments[c*2-1].p2 = Point{maxX, first.y};
+        for (int c = 0; c < rst.nets[n].numPins; c++) {
+            xs[c] = rst.nets[n].pins[c].x;
+            ys[c] = rst.nets[n].pins[c].y;
         }
 
+        Tree tree = flute(rst.nets[n].numPins, xs, ys, ACCURACY);
+
+        int maxNumCons = tree.deg*2 - 3;
+        int numSegs = 0;
+        rst.nets[n].nroute.segments = new Segment[maxNumCons*2];
+
+        for (int c = 0; c < tree.deg*2 - 2; c++) {
+
+            Branch &base = tree.branch[c];
+            if (base.n == c) continue;
+            Branch &parent = tree.branch[base.n];
+            if (base.x == parent.x && base.y == parent.y) continue;
+
+            if (base.x != parent.x) {
+                int minX = min(base.x, parent.x);
+                int maxX = max(base.x, parent.x);
+
+                rst.nets[n].nroute.segments[numSegs].p1.x = minX;
+                rst.nets[n].nroute.segments[numSegs].p1.y = base.y;
+                rst.nets[n].nroute.segments[numSegs].p2.x = maxX;
+                rst.nets[n].nroute.segments[numSegs].p2.y = base.y;
+                numSegs++;
+            }
+
+            if (base.y != parent.y) {
+                int minY = min(base.y, parent.y);
+                int maxY = max(base.y, parent.y);
+
+                rst.nets[n].nroute.segments[numSegs].p1.x = parent.x;
+                rst.nets[n].nroute.segments[numSegs].p1.y = minY;
+                rst.nets[n].nroute.segments[numSegs].p2.x = parent.x;
+                rst.nets[n].nroute.segments[numSegs].p2.y = maxY;
+                numSegs++;
+            }
+        }
+
+        assert(numSegs <= maxNumCons*2);
+
+        rst.nets[n].nroute.numSegs = numSegs;
+
+        free(tree.branch);
     }
+    cout << endl;
     return 1;
 }
 
