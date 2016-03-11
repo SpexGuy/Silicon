@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O3 -I. -pthreads
+CFLAGS = -O3 -I. -pthread
 
 SRC     = dist.c dl.c err.c heap.c mst2.c neighbors.c \
 	bookshelf_IO.c memAlloc.c flute.c flute_mst.c
