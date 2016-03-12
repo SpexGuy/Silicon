@@ -63,7 +63,6 @@ int fail(const char *msg) {
 int readBenchmark(istream &in, RoutingInst &rst) {
     if (!in) return fail("Bad input stream");
 
-    int linenum = -1;
     string line;
     string token;
 
@@ -242,7 +241,6 @@ int solveRouting(RoutingInst &rst){
 
         free(tree.branch);
     }
-    cout << endl;
     return 1;
 }
 
@@ -257,12 +255,4 @@ int writeOutput(ostream &out, RoutingInst &rst){
     }
     return 1;
 }
-
-
-int release(RoutingInst &rst){
-    /*********** TO BE FILLED BY YOU **********/
-
-    return 1;
-}
-
 
