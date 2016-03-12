@@ -18,7 +18,7 @@ CCOPT = -I ./include -L ./lib -m64 -O -fPIC -fexceptions -DNDEBUG -DIL_STD -g -W
 # ---------------------------------------------------------------------         
 
 CCFLAGS = $(CCOPT) 
-CCLNFLAGS = -lm -pthreads -lboost_system -lboost_filesystem
+CCLNFLAGS = -lm -pthread -lboost_system -lboost_filesystem
 
 #------------------------------------------------------------                   
 #  make all      : to compile.                                     
