@@ -214,6 +214,10 @@ int solveRouting(RoutingInst &rst){
                 rst.nets[n].nroute.segments[numSegs].p2.x = maxX;
                 rst.nets[n].nroute.segments[numSegs].p2.y = base.y;
                 numSegs++;
+
+                for (int x = minX; x < maxX; x++) {
+                    rst.cell(x, base.y).right.utilization++;
+                }
             }
 
             if (base.y != parent.y) {
@@ -225,6 +229,10 @@ int solveRouting(RoutingInst &rst){
                 rst.nets[n].nroute.segments[numSegs].p2.x = parent.x;
                 rst.nets[n].nroute.segments[numSegs].p2.y = maxY;
                 numSegs++;
+
+                for (int y = minY; y < maxY; y++) {
+                    rst.cell(parent.x, y).down.utilization++;
+                }
             }
         }
 

@@ -12,7 +12,7 @@ set(SOURCE_FILES
     ece556.cpp
     ece556.h
     main.cpp
-)
+        svg.cpp svg.h)
 
 set(FLUTE_OBJS
     obj/bookshelf_IO.o

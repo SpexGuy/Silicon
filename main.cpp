@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "ece556.h"
+#include "svg.h"
 
 using std::ifstream;
 using std::ofstream;
@@ -53,6 +54,8 @@ int main(int argc, char **argv)
     }
 	dt = clock() - time;
 	cout << "Routed in " << (dt * 1000)/CLOCKS_PER_SEC << " ms." << endl;
+
+    writeCongestionSvg(rst, "congestion.html");
 
     /// Write the result
     // resource cage for out
