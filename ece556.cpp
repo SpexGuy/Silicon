@@ -4,11 +4,13 @@
 #include <sstream>
 #include <assert.h>
 
+#include "ece556.h"
+#include "astar.h"
+
 extern "C" {
     #include <flute/flute.h>
 }
 
-#include "ece556.h"
 
 using std::string;
 using std::getline;

@@ -4,6 +4,7 @@
 #ifndef ECE556_H
 #define ECE556_H
 
+#include <assert.h>
 #include <iostream>
 
 /**
@@ -15,6 +16,9 @@ struct Point {
 
     inline bool operator==(const Point &other) const {
         return x == other.x && y == other.y;
+    }
+    inline bool operator!=(const Point &other) const {
+        return !(*this == other);
     }
 };
 
@@ -89,6 +93,10 @@ struct RoutingInst {
     inline int index(const int x, const int y) const {
         // naive row-major scheme for now...
         // TODO: morton curve or something better for traversing
+        assert(x >= 0);
+        assert(x < gx);
+        assert(y >= 0);
+        assert(y < gy);
         return y * gx + x;
     }
     inline Cell &cell(const int x, const int y) {
@@ -96,6 +104,12 @@ struct RoutingInst {
     }
     inline const Cell &cell(const int x, const int y) const {
         return cells[index(x, y)];
+    }
+    inline Cell &cell(const Point &p) {
+        return cell(p.x, p.y);
+    }
+    inline const Cell &cell(const Point &p) const {
+        return cell(p.x, p.y);
     }
 };
 
