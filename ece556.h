@@ -93,10 +93,7 @@ struct RoutingInst {
     inline int index(const int x, const int y) const {
         // naive row-major scheme for now...
         // TODO: morton curve or something better for traversing
-        assert(x >= 0);
-        assert(x < gx);
-        assert(y >= 0);
-        assert(y < gy);
+        assert(valid(x, y));
         return y * gx + x;
     }
     inline Cell &cell(const int x, const int y) {
@@ -110,6 +107,14 @@ struct RoutingInst {
     }
     inline const Cell &cell(const Point &p) const {
         return cell(p.x, p.y);
+    }
+
+    inline bool valid(int x, int y) const {
+        return x >= 0 && x < gx &&
+               y >= 0 && y < gy;
+    }
+    inline bool valid(const Point &p) const {
+        return valid(p.x, p.y);
     }
 };
 

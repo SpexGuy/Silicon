@@ -32,11 +32,18 @@ struct AStarFrontierRecord {
 
 struct AStarDomainRecord {
     Point parent;
+#ifndef NDEBUG
     int cost;
+#endif
 
     AStarDomainRecord() {}
+
     AStarDomainRecord(const AStarFrontierRecord &record)
-            : parent(record.parent), cost(record.cost) {}
+            : parent(record.parent)
+#ifndef NDEBUG
+            , cost(record.cost)
+#endif
+    {}
 };
 
 // For std::unordered_map<Point, ...>
@@ -54,15 +61,30 @@ typedef std::priority_queue<AStarFrontierRecord> Frontier;
 
 // H(Point) is a lambda which returns the heuristic value h(x) for a point x.
 // G(Point) is a lambda which returns true iff the given point is a goal point.
+// Returns the cost of the solution
 template<typename H, typename G>
-inline void AStar(const RoutingInst &inst, Frontier &frontier, H heuristic, G is_goal) {
+inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal) {
+    assert(path.empty());
+
     Domain explored;
+
     while(!frontier.empty()) {
+
         const AStarFrontierRecord current = frontier.top();
+
         if (is_goal(current.self)) {
-            // TODO: backtrace
-            return;
+            // backtrace to beginning
+            path.push_back(current.self);
+            Point p = current.parent;
+            while(p.x >= 0) {
+                path.push_back(p);
+                assert(explored.find(p) != explored.end());
+                p = explored[p].parent;
+            }
+            std::reverse(path.begin(), path.end());
+            return current.cost;
         }
+
         frontier.pop();
 
         auto check_repeat = explored.find(current.self);
@@ -79,8 +101,7 @@ inline void AStar(const RoutingInst &inst, Frontier &frontier, H heuristic, G is
 
         #define astar_add_child(child, util_pt, util_dir) do { \
             if (child == current.parent) continue; \
-            if (child.x < 0 || child.x >= inst.gx) continue; \
-            if (child.y < 0 || child.y >= inst.gy) continue; \
+            if (!inst.valid(child)) continue; \
             \
             int cost = current.cost + inst.cell(util_pt).util_dir.utilization + 1; \
             auto it = explored.find(child); \
@@ -98,15 +119,19 @@ inline void AStar(const RoutingInst &inst, Frontier &frontier, H heuristic, G is
 
         #undef astar_add_child
     }
+    assert(false);
+    return -1;
 }
 
-inline void maze_route_p2p(const RoutingInst &inst, const Point &start, const Point &end) {
+inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Point &end, std::vector<Point> &path) {
+    assert(inst.valid(start));
+    assert(inst.valid(end));
+
     Frontier frontier;
     frontier.emplace(Point{-1,-1}, start, 0, 0); // heuristic cost doesn't matter here because we pop immediately
-    return AStar(inst, frontier,
+    return AStar(inst, frontier, path,
                  [&end](const Point &p) -> int  {return abs(p.x-end.x) + abs(p.y-end.y);},
                  [&end](const Point &p) -> bool {return p == end;});
 }
-
 
 #endif //SILICON_ASTAR_H
