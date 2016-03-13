@@ -14,11 +14,11 @@ struct AStarFrontierRecord {
     Point parent;
     Point self;
     int cost;
-    int h;
+    int hcost;
 
     AStarFrontierRecord() {}
     AStarFrontierRecord(const Point &parent, const Point &self, int cost, int h)
-            : parent(parent), self(self), cost(cost), h(h)
+            : parent(parent), self(self), cost(cost), hcost(h + cost)
     {
         assert(cost >= 0);
         assert(h >= 0);
@@ -26,7 +26,7 @@ struct AStarFrontierRecord {
 
     // DO NOT USE! This is for std::priority_queue
     inline bool operator<(const AStarFrontierRecord &other) const {
-        return (h + cost) > (other.h + other.cost);
+        return hcost > other.hcost;
     }
 };
 
@@ -77,8 +77,7 @@ inline void AStar(const RoutingInst &inst, Frontier &frontier, H heuristic, G is
         Point left {current.self.x-1, current.self.y  };
         Point up   {current.self.x  , current.self.y-1};
 
-
-#define astar_add_child(child, util_pt, util_dir) do { \
+        #define astar_add_child(child, util_pt, util_dir) do { \
             if (child == current.parent) continue; \
             if (child.x < 0 || child.x >= inst.gx) continue; \
             if (child.y < 0 || child.y >= inst.gy) continue; \
@@ -89,7 +88,7 @@ inline void AStar(const RoutingInst &inst, Frontier &frontier, H heuristic, G is
                 assert(it->second.cost <= cost); \
                 continue; \
             } \
-            frontier.push(AStarFrontierRecord(current.self, child, cost, heuristic(child))); \
+            frontier.emplace(current.self, child, cost, heuristic(child)); \
         } while(0)
 
         astar_add_child(right, current.self, right);
@@ -97,7 +96,7 @@ inline void AStar(const RoutingInst &inst, Frontier &frontier, H heuristic, G is
         astar_add_child(left , left        , right);
         astar_add_child(up   , up          , down );
 
-#undef astar_add_child
+        #undef astar_add_child
     }
 }
 
@@ -106,14 +105,6 @@ inline void maze_route_p2p(const RoutingInst &inst, const Point &start, const Po
     frontier.emplace(Point{-1,-1}, start, 0, 0); // heuristic cost doesn't matter here because we pop immediately
     return AStar(inst, frontier,
                  [&end](const Point &p) -> int  {return abs(p.x-end.x) + abs(p.y-end.y);},
-                 [&end](const Point &p) -> bool {return p == end;});
-}
-
-inline void maze_route_p2p_dijkstra(const RoutingInst &inst, const Point &start, const Point &end) {
-    Frontier frontier;
-    frontier.emplace(Point{-1,-1}, start, 0, 0); // heuristic cost doesn't matter here because we pop immediately
-    return AStar(inst, frontier,
-                 [&end](const Point &p) -> int  {return 0;},
                  [&end](const Point &p) -> bool {return p == end;});
 }
 
