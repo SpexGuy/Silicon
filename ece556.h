@@ -99,7 +99,7 @@ struct RoutingInst {
         return y * gx + x;
     }
     inline int edge_index(const int x, const int y, bool horz) const {
-        return (index(x, y) << 1) | (horz ? 1 : 0);
+        return (index(x, y) << 1) | (horz ? 0 : 1);
     }
 
     inline Point point(const int idx) const {
@@ -110,7 +110,7 @@ struct RoutingInst {
     }
     // converts edge idx -> point idx
     inline int end(int edge) {
-        return (edge >> 1) + ((edge & 1) ? 1 : gx);
+        return (edge >> 1) + ((edge & 1) ? gx : 1);
     }
 
     inline Cell &cell(const int x, const int y) {
