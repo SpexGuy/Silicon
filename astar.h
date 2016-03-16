@@ -5,6 +5,7 @@
 #ifndef SILICON_ASTAR_H
 #define SILICON_ASTAR_H
 
+#include <algorithm>
 #include <unordered_map>
 #include <queue>
 #include <assert.h>
