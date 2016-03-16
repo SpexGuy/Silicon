@@ -142,51 +142,11 @@ int readBenchmark(istream &in, RoutingInst &rst) {
     return 1;
 }
 
-int solveRouting(RoutingInst &rst){
-    /*********** TO BE FILLED BY YOU **********/
-    // THIS IS BAD AND I FEEL BAD.
-    // It will all be erased soon.
-    // Routes a net like this
-    //
-    //                      1
-    //                      |
-    //        2------------||
-    //                     |||----------3
-    //                      0
-    //                    ||||
-    //                    ||||
-    //       6---5========||||----------4
-    //                      |
-    //                      |
-    //                7-----|
-    //
-
+int solveRouting(RoutingInst &rst) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
 
     for (int n = 0; n < rst.numNets; n++) {
-//        if (rst.nets[n].numPins < 2)  continue;
-//
-//        rst.nets[n].nroute.numSegs = (rst.nets[n].numPins-1)*2;
-//        rst.nets[n].nroute.segments = new Segment[rst.nets[n].nroute.numSegs];
-//
-//        // We're going to build a spine from the first point.
-//        Point &first = rst.nets[n].pins[0];
-//
-//        // for each pin besides the first, make a branch off of the spine
-//        for (int c = 1; c < rst.nets[n].numPins; c++) {
-//            Point &pin = rst.nets[n].pins[c];
-//            int minY =
-//                    min(pin.y, first.y);
-//            int maxY = max(pin.y, first.y);
-//            rst.nets[n].nroute.segments[(c-1)*2].p1 = Point{pin.x, minY};
-//            rst.nets[n].nroute.segments[(c-1)*2].p2 = Point{pin.x, maxY};
-//
-//            int minX = min(pin.x, first.x);
-//            int maxX = max(pin.x, first.x);
-//            rst.nets[n].nroute.segments[c*2-1].p1 = Point{minX, first.y};
-//            rst.nets[n].nroute.segments[c*2-1].p2 = Point{maxX, first.y};
-//        }
 
         for (int c = 0; c < rst.nets[n].numPins; c++) {
             xs[c] = rst.nets[n].pins[c].x;
