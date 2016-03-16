@@ -70,6 +70,8 @@ struct Edge {
     int utilization;
 };
 
+// THE CODE DEPENDS ON THIS STRUCTURE FOR A CELL!!!
+// DO NOT MODIFY.
 struct Cell {
     Edge right;
     Edge down;
@@ -96,6 +98,21 @@ struct RoutingInst {
         assert(valid(x, y));
         return y * gx + x;
     }
+    inline int edge_index(const int x, const int y, bool horz) const {
+        return (index(x, y) << 1) | (horz ? 1 : 0);
+    }
+
+    inline Point point(const int idx) const {
+        return Point{idx % gx, idx / gx};
+    }
+    inline Point point_from_edge(const int edge) const {
+        return point(edge >> 1);
+    }
+    // converts edge idx -> point idx
+    inline int end(int edge) {
+        return (edge >> 1) + ((edge & 1) ? 1 : gx);
+    }
+
     inline Cell &cell(const int x, const int y) {
         return cells[index(x, y)];
     }
@@ -107,6 +124,13 @@ struct RoutingInst {
     }
     inline const Cell &cell(const Point &p) const {
         return cell(p.x, p.y);
+    }
+
+    inline Edge &edge(const int index) {
+        return reinterpret_cast<Edge *>(cells)[index];
+    }
+    inline const Edge &edge(const int index) const {
+        return reinterpret_cast<const Edge *>(cells)[index];
     }
 
     inline bool valid(int x, int y) const {

@@ -142,6 +142,56 @@ int readBenchmark(istream &in, RoutingInst &rst) {
     return 1;
 }
 
+void L_route(RoutingInst &rst, Segment &seg) {
+    int minX = min(seg.p1.x, seg.p2.x);
+    int maxX = max(seg.p1.x, seg.p2.x);
+    int minY = min(seg.p1.y, seg.p2.y);
+    int maxY = max(seg.p1.y, seg.p2.y);
+
+    // calculate cost of each L
+    int bxpy_cost = 0;
+    int bypx_cost = 0;
+    for (int x = minX; x < maxX; x++) {
+        bxpy_cost += rst.cell(x, seg.p2.y).right.utilization;
+        bxpy_cost += rst.cell(x, seg.p1.y).right.utilization;
+    }
+    for (int y = minY; y < maxY; y++) {
+        bxpy_cost += rst.cell(seg.p1.x, y).down.utilization;
+        bxpy_cost += rst.cell(seg.p2.x, y).down.utilization;
+    }
+
+    // allocate edge indices
+    // TODO: Better allocator.
+    int numEdges = seg.numEdges = abs(seg.p1.x-seg.p2.x)+abs(seg.p1.y-seg.p2.y);
+    int *edge = seg.edges = new int[numEdges];
+
+    // mark more expensive L
+    if (bxpy_cost > bypx_cost) {
+        for (int x = minX; x < maxX; x++) {
+            rst.cell(x, seg.p2.y).right.utilization++;
+            *edge = rst.edge_index(x, seg.p2.y, true);
+            edge++;
+        }
+        for (int y = minY; y < maxY; y++) {
+            rst.cell(seg.p1.x, y).down.utilization++;
+            *edge = rst.edge_index(seg.p1.x, y, false);
+            edge++;
+        }
+    } else {
+        for (int x = minX; x < maxX; x++) {
+            rst.cell(x, seg.p1.y).right.utilization++;
+            *edge = rst.edge_index(x, seg.p1.y, true);
+            edge++;
+        }
+        for (int y = minY; y < maxY; y++) {
+            rst.cell(seg.p2.x, y).down.utilization++;
+            *edge = rst.edge_index(seg.p2.x, y, false);
+            edge++;
+        }
+    }
+    assert(edge == (seg.edges + numEdges));
+}
+
 int solveRouting(RoutingInst &rst) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
@@ -157,53 +207,51 @@ int solveRouting(RoutingInst &rst) {
 
         int maxNumCons = tree.deg*2 - 3;
         int numSegs = 0;
-        rst.nets[n].nroute.segments = new Segment[maxNumCons*2];
+        rst.nets[n].nroute.segments = new Segment[maxNumCons];
 
         for (int c = 0; c < tree.deg*2 - 2; c++) {
-
             Branch &base = tree.branch[c];
             if (base.n == c) continue;
             Branch &parent = tree.branch[base.n];
             if (base.x == parent.x && base.y == parent.y) continue;
 
-            if (base.x != parent.x) {
-                int minX = min(base.x, parent.x);
-                int maxX = max(base.x, parent.x);
-
-                rst.nets[n].nroute.segments[numSegs].p1.x = minX;
-                rst.nets[n].nroute.segments[numSegs].p1.y = base.y;
-                rst.nets[n].nroute.segments[numSegs].p2.x = maxX;
-                rst.nets[n].nroute.segments[numSegs].p2.y = base.y;
-                numSegs++;
-
-                for (int x = minX; x < maxX; x++) {
-                    rst.cell(x, base.y).right.utilization++;
-                }
-            }
-
-            if (base.y != parent.y) {
-                int minY = min(base.y, parent.y);
-                int maxY = max(base.y, parent.y);
-
-                rst.nets[n].nroute.segments[numSegs].p1.x = parent.x;
-                rst.nets[n].nroute.segments[numSegs].p1.y = minY;
-                rst.nets[n].nroute.segments[numSegs].p2.x = parent.x;
-                rst.nets[n].nroute.segments[numSegs].p2.y = maxY;
-                numSegs++;
-
-                for (int y = minY; y < maxY; y++) {
-                    rst.cell(parent.x, y).down.utilization++;
-                }
-            }
+            rst.nets[n].nroute.segments[numSegs].p1 = Point{base.x, base.y};
+            rst.nets[n].nroute.segments[numSegs].p2 = Point{parent.x, parent.y};
+            numSegs++;
         }
 
-        assert(numSegs <= maxNumCons*2);
+        assert(numSegs <= maxNumCons);
 
         rst.nets[n].nroute.numSegs = numSegs;
 
+        for (int s = 0; s < numSegs; s++) {
+            L_route(rst, rst.nets[n].nroute.segments[s]);
+        }
+
         free(tree.branch);
     }
+
     return 1;
+}
+
+inline bool is_straight(int p1ex, int p2ex) {
+    return (p1ex & 1) == (p2ex & 1);
+}
+
+inline void write_line(ostream &out, RoutingInst &inst, int edge1, int edge2) {
+    assert(edge1 <= edge2); // Temporary, maybe.
+    out << inst.point_from_edge(edge1) << '-' << inst.point(inst.end(edge2)) << endl;
+}
+
+inline void write_segment(ostream &out, RoutingInst &rst, Segment &segment) {
+    int edge = segment.edges[0];
+    for (int c = 1; c < segment.numEdges; c++) {
+        if (!is_straight(edge, segment.edges[c])) {
+            write_line(out, rst, edge, segment.edges[c - 1]);
+            edge = segment.edges[c];
+        }
+    }
+    write_line(out, rst, edge, segment.edges[segment.numEdges-1]);
 }
 
 int writeOutput(ostream &out, RoutingInst &rst){
@@ -211,7 +259,7 @@ int writeOutput(ostream &out, RoutingInst &rst){
         out << 'n' << n << endl;
         for (int c = 0; c < rst.nets[n].nroute.numSegs; c++) {
             if (rst.nets[n].nroute.segments[c].empty()) continue;
-            out << rst.nets[n].nroute.segments[c] << endl;
+            write_segment(out, rst, rst.nets[n].nroute.segments[c]);
         }
         out << '!' << endl;
     }
