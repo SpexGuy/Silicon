@@ -3,6 +3,8 @@
 #include <string>
 #include <sstream>
 #include <assert.h>
+#include <vector>
+#include <algorithm>
 
 #include "ece556.h"
 #include "astar.h"
@@ -13,6 +15,7 @@ extern "C" {
 
 
 using std::string;
+using std::vector;
 using std::getline;
 using std::istream;
 using std::ostream;
@@ -192,10 +195,41 @@ void L_route(RoutingInst &rst, Segment &seg) {
     assert(edge == (seg.edges + numEdges));
 }
 
+struct SegmentInfo {
+    int overflow;
+    Segment *seg;
+
+    SegmentInfo(Segment *seg) noexcept : seg(seg) {}
+    SegmentInfo(const SegmentInfo &other) noexcept
+            : overflow(other.overflow), seg(other.seg) {}
+    SegmentInfo &operator=(const SegmentInfo &other) noexcept {
+        overflow = other.overflow;
+        seg = other.seg;
+        return *this;
+    }
+};
+
+inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
+    int of = 0;
+    for (int c = 0; c < seg.numEdges; c++) {
+        of += rst.overflow(seg.edges[c]);
+    }
+    return of;
+}
+
+void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
+    // TODO: iteration like this shits all over the L2 cache
+    // (because seg.seg is a ptr and they may be all out of order)
+    for (auto &seg : seg_info) {
+        seg.overflow = calculate_overflow(rst, *seg.seg);
+    }
+}
+
 int solveRouting(RoutingInst &rst) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
 
+    vector<SegmentInfo> seg_info;
     for (int n = 0; n < rst.numNets; n++) {
 
         for (int c = 0; c < rst.nets[n].numPins; c++) {
@@ -217,6 +251,7 @@ int solveRouting(RoutingInst &rst) {
 
             rst.nets[n].nroute.segments[numSegs].p1 = Point{base.x, base.y};
             rst.nets[n].nroute.segments[numSegs].p2 = Point{parent.x, parent.y};
+            seg_info.emplace_back(&rst.nets[n].nroute.segments[numSegs]);
             numSegs++;
         }
 
@@ -231,6 +266,18 @@ int solveRouting(RoutingInst &rst) {
         free(tree.branch);
     }
 
+    cout << "Starting overflow" << endl;
+    init_overflow(rst, seg_info);
+    std::sort(seg_info.begin(), seg_info.end(),
+              [](const SegmentInfo &a, const SegmentInfo &b) -> bool
+              { return a.overflow > b.overflow; }
+    );
+    int over_count = 0;
+    for (auto &info : seg_info) {
+        if (info.overflow > 0) over_count++;
+        else break;
+    }
+    cout << over_count << " of " << seg_info.size() << " nets are overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
     return 1;
 }
 

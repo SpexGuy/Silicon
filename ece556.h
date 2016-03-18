@@ -140,6 +140,11 @@ struct RoutingInst {
     inline bool valid(const Point &p) const {
         return valid(p.x, p.y);
     }
+
+    inline int overflow(const int edge_index) const {
+        assert(valid(point_from_edge(edge_index)));
+        return std::max(edge(edge_index).utilization - cap, 0);
+    }
 };
 
 inline float usage(const RoutingInst &inst, const Edge &edge) {
