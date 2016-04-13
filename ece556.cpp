@@ -238,8 +238,14 @@ void ripup(RoutingInst &rst, SegmentInfo &seg) {
 void maze_route(RoutingInst &inst, Segment *pSegment) {
     assert(pSegment->edges == nullptr);
 
+    Point tl, br;
+    const int bb_size = 20;
+    tl.x = max(0, min(pSegment->p1.x, pSegment->p2.x) - bb_size);
+    tl.y = max(0, min(pSegment->p1.y, pSegment->p2.y) - bb_size);
+    br.x = min(inst.gx, max(pSegment->p1.x, pSegment->p2.x) + 1 + bb_size);
+    br.y = min(inst.gy, max(pSegment->p1.y, pSegment->p2.y) + 1 + bb_size);
     vector<Point> path;
-    maze_route_p2p(inst, pSegment->p1, pSegment->p2, path);
+    maze_route_p2p(inst, pSegment->p1, pSegment->p2, tl, br, path);
 
     pSegment->edges = new int[path.size()-1];
     pSegment->numEdges = path.size() - 1;
@@ -332,15 +338,15 @@ int solveRouting(RoutingInst &rst) {
     for (auto &info : seg_info) {
         if (info.overflow > 0) {
             routed_count++;
+
             maze_route(rst, info.seg);
-            if (routed_count % 10 == 0) {
-                time_t elapsed = time(nullptr) - start_time;
-                if (elapsed - lastElapsed >= 1) {
-                    lastElapsed = elapsed;
-                    time_t estimated = elapsed * over_count / routed_count;
-                    cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " passed, " <<
-                    estimated << " total)." << std::flush;
-                }
+
+            time_t elapsed = time(nullptr) - start_time;
+            if (elapsed - lastElapsed >= 1) {
+                lastElapsed = elapsed;
+                time_t estimated = elapsed * over_count / routed_count;
+                cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " passed, " <<
+                estimated << " total)." << std::flush;
             }
         }
         else break;

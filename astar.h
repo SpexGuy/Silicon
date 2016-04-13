@@ -65,8 +65,8 @@ typedef std::priority_queue<AStarFrontierRecord> Frontier;
 // H(Point) is a lambda which returns the heuristic value h(x) for a point x.
 // G(Point) is a lambda which returns true iff the given point is a goal point.
 // Returns the cost of the solution
-template<typename H, typename G>
-inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal, int estimate) {
+template<typename H, typename G, typename V>
+inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal, V valid, int estimate) {
     assert(path.empty());
     long worstNodes = estimate * estimate;
 
@@ -106,7 +106,7 @@ inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point>
 
         #define astar_add_child(child, util_pt, util_dir) do { \
             if (child == current.parent) continue; \
-            if (!inst.valid(child)) continue; \
+            if (!valid(child)) continue; \
             \
             int newcost = inst.cell(util_pt).util_dir.utilization + 1; \
             if (newcost > inst.cap) \
@@ -132,7 +132,7 @@ inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point>
     return -1;
 }
 
-inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Point &end, std::vector<Point> &path) {
+inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Point &end, const Point &tl, const Point &br, std::vector<Point> &path) {
     assert(inst.valid(start));
     assert(inst.valid(end));
 
@@ -141,6 +141,7 @@ inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Poi
     return AStar(inst, frontier, path,
                  [end](const Point p) -> int  {return abs(p.x-end.x) + abs(p.y-end.y);},
                  [end](const Point p) -> bool {return p == end;},
+                 [tl, br](const Point p) -> bool {return p.x >= tl.x && p.y >= tl.y && p.x < br.x && p.y < br.y;},
                  abs(start.x - end.x) + abs(start.y - end.y));
 }
 
