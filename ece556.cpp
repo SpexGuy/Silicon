@@ -209,6 +209,8 @@ struct SegmentInfo {
     }
 };
 
+void maze_route(RoutingInst &inst, Segment *pSegment);
+
 inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
     int of = 0;
     for (int c = 0; c < seg.numEdges; c++) {
@@ -223,6 +225,46 @@ void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     for (auto &seg : seg_info) {
         seg.overflow = calculate_overflow(rst, *seg.seg);
     }
+}
+
+void ripup(RoutingInst &rst, SegmentInfo &seg) {
+    for (int c = 0; c < seg.seg->numEdges; c++) {
+        rst.edge(seg.seg->edges[c]).utilization--;
+    }
+    delete [] seg.seg->edges;
+    seg.seg->edges = nullptr;
+}
+
+void maze_route(RoutingInst &inst, Segment *pSegment) {
+    assert(pSegment->edges == nullptr);
+
+    vector<Point> path;
+    maze_route_p2p(inst, pSegment->p1, pSegment->p2, path);
+
+    pSegment->edges = new int[path.size()-1];
+    pSegment->numEdges = path.size() - 1;
+    for (int c = 0; c < path.size()-1; c++) {
+        Point &prev = path[c];
+        Point &curr = path[c+1];
+        if (prev.x == curr.x) {
+            assert(abs(prev.y - curr.y) == 1);
+            if (prev.y < curr.y)
+                pSegment->edges[c] = inst.edge_index(prev.x, prev.y, false);
+            else
+                pSegment->edges[c] = inst.edge_index(curr.x, curr.y, false);
+        } else {
+            assert(prev.y == curr.y);
+            assert(abs(prev.x - curr.x) == 1);
+
+            if (prev.x < curr.x)
+                pSegment->edges[c] = inst.edge_index(prev.x, prev.y, true);
+            else
+                pSegment->edges[c] = inst.edge_index(curr.x, curr.y, true);
+        }
+        inst.edge(pSegment->edges[c]).utilization++;
+    }
+    assert(path.front() == pSegment->p1);
+    assert(path.back()  == pSegment->p2);
 }
 
 int solveRouting(RoutingInst &rst) {
@@ -266,18 +308,45 @@ int solveRouting(RoutingInst &rst) {
         free(tree.branch);
     }
 
-    cout << "Starting overflow" << endl;
+    cout << "Calculate overflow" << endl;
     init_overflow(rst, seg_info);
     std::sort(seg_info.begin(), seg_info.end(),
               [](const SegmentInfo &a, const SegmentInfo &b) -> bool
               { return a.overflow > b.overflow; }
     );
+
+    cout << "Ripup" << endl;
     int over_count = 0;
     for (auto &info : seg_info) {
-        if (info.overflow > 0) over_count++;
+        if (info.overflow > 0) {
+            ripup(rst, info);
+            over_count++;
+        }
         else break;
     }
-    cout << over_count << " of " << seg_info.size() << " nets are overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
+
+    cout << "Reroute" << endl;
+    time_t start_time = time(nullptr);
+    time_t lastElapsed = -1;
+    int routed_count = 0;
+    for (auto &info : seg_info) {
+        if (info.overflow > 0) {
+            routed_count++;
+            maze_route(rst, info.seg);
+            if (routed_count % 10 == 0) {
+                time_t elapsed = time(nullptr) - start_time;
+                if (elapsed - lastElapsed >= 1) {
+                    lastElapsed = elapsed;
+                    time_t estimated = elapsed * over_count / routed_count;
+                    cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " passed, " <<
+                    estimated << " total)." << std::flush;
+                }
+            }
+        }
+        else break;
+    }
+
+    cout << over_count << " of " << seg_info.size() << " nets were overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
     return 1;
 }
 
@@ -286,7 +355,8 @@ inline bool is_straight(int p1ex, int p2ex) {
 }
 
 inline void write_line(ostream &out, RoutingInst &inst, int edge1, int edge2) {
-    assert(edge1 <= edge2); // Temporary, maybe.
+    if (edge1 > edge2)
+        std::swap(edge1, edge2);
     out << inst.point_from_edge(edge1) << '-' << inst.point(inst.end(edge2)) << endl;
 }
 

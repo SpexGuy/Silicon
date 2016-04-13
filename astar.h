@@ -11,6 +11,8 @@
 #include <assert.h>
 #include "ece556.h"
 
+#define OVERFLOW_EXPENSE 10;
+
 struct AStarFrontierRecord {
     Point parent;
     Point self;
@@ -64,10 +66,12 @@ typedef std::priority_queue<AStarFrontierRecord> Frontier;
 // G(Point) is a lambda which returns true iff the given point is a goal point.
 // Returns the cost of the solution
 template<typename H, typename G>
-inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal) {
+inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal, int estimate) {
     assert(path.empty());
+    long worstNodes = estimate * estimate;
 
     Domain explored;
+    explored.reserve(worstNodes);
 
     while(!frontier.empty()) {
 
@@ -93,7 +97,7 @@ inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point>
             assert(check_repeat->second.cost <= current.cost);
             continue;
         }
-        explored[current.self] = current;
+        explored.emplace(current.self, current);
 
         Point right{current.self.x+1, current.self.y  };
         Point down {current.self.x  , current.self.y+1};
@@ -104,7 +108,11 @@ inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point>
             if (child == current.parent) continue; \
             if (!inst.valid(child)) continue; \
             \
-            int cost = current.cost + inst.cell(util_pt).util_dir.utilization + 1; \
+            int newcost = inst.cell(util_pt).util_dir.utilization + 1; \
+            if (newcost > inst.cap) \
+                newcost += (newcost-inst.cap) * OVERFLOW_EXPENSE; \
+            \
+            int cost = current.cost + newcost; \
             auto it = explored.find(child); \
             if (it != explored.end()) { \
                 assert(it->second.cost <= cost); \
@@ -131,8 +139,9 @@ inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Poi
     Frontier frontier;
     frontier.emplace(Point{-1,-1}, start, 0, 0); // heuristic cost doesn't matter here because we pop immediately
     return AStar(inst, frontier, path,
-                 [&end](const Point &p) -> int  {return abs(p.x-end.x) + abs(p.y-end.y);},
-                 [&end](const Point &p) -> bool {return p == end;});
+                 [end](const Point p) -> int  {return abs(p.x-end.x) + abs(p.y-end.y);},
+                 [end](const Point p) -> bool {return p == end;},
+                 abs(start.x - end.x) + abs(start.y - end.y));
 }
 
 #endif //SILICON_ASTAR_H
