@@ -55,7 +55,8 @@ int main(int argc, char **argv)
 	dt = clock() - time;
 	cout << "Routed in " << (dt * 1000)/CLOCKS_PER_SEC << " ms." << endl;
 
-    writeCongestionSvg(rst, "congestion.html");
+    int of = writeCongestionSvg(rst, "congestion.html");
+    cout << "Total overflow: " << of << endl;
 
     /// Write the result
     // resource cage for out

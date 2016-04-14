@@ -273,6 +273,49 @@ void maze_route(RoutingInst &inst, Segment *pSegment) {
     assert(path.back()  == pSegment->p2);
 }
 
+void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info) {
+    cout << "Calculate overflow" << endl;
+    init_overflow(rst, seg_info);
+    std::sort(seg_info.begin(), seg_info.end(),
+              [](const SegmentInfo &a, const SegmentInfo &b) -> bool
+              { return a.overflow > b.overflow; }
+    );
+
+    cout << "Ripup" << endl;
+    int over_count = 0;
+    for (auto &info : seg_info) {
+        if (info.overflow > 0) {
+            ripup(rst, info);
+            over_count++;
+        }
+        else break;
+    }
+    cout << over_count << " of " << seg_info.size() << " nets were overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
+
+    cout << "Reroute" << endl;
+    time_t start_time = time(nullptr);
+    time_t lastElapsed = -1;
+    int routed_count = 0;
+    for (auto &info : seg_info) {
+        if (info.overflow > 0) {
+            routed_count++;
+
+            maze_route(rst, info.seg);
+
+            time_t elapsed = time(nullptr) - start_time;
+            if (elapsed - lastElapsed >= 1) {
+                lastElapsed = elapsed;
+                time_t estimated = elapsed * over_count / routed_count;
+                cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " elapsed, " <<
+                estimated << " total)." << std::flush;
+            }
+        }
+        else break;
+    }
+    time_t elapsed = time(nullptr) - start_time;
+    cout << "\r" << over_count << " nets routed in " << elapsed << " seconds." << endl;
+}
+
 int solveRouting(RoutingInst &rst) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
@@ -314,45 +357,9 @@ int solveRouting(RoutingInst &rst) {
         free(tree.branch);
     }
 
-    cout << "Calculate overflow" << endl;
-    init_overflow(rst, seg_info);
-    std::sort(seg_info.begin(), seg_info.end(),
-              [](const SegmentInfo &a, const SegmentInfo &b) -> bool
-              { return a.overflow > b.overflow; }
-    );
+    ripupAndReroute(rst, seg_info);
+    //ripupAndReroute(rst, seg_info);
 
-    cout << "Ripup" << endl;
-    int over_count = 0;
-    for (auto &info : seg_info) {
-        if (info.overflow > 0) {
-            ripup(rst, info);
-            over_count++;
-        }
-        else break;
-    }
-
-    cout << "Reroute" << endl;
-    time_t start_time = time(nullptr);
-    time_t lastElapsed = -1;
-    int routed_count = 0;
-    for (auto &info : seg_info) {
-        if (info.overflow > 0) {
-            routed_count++;
-
-            maze_route(rst, info.seg);
-
-            time_t elapsed = time(nullptr) - start_time;
-            if (elapsed - lastElapsed >= 1) {
-                lastElapsed = elapsed;
-                time_t estimated = elapsed * over_count / routed_count;
-                cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " passed, " <<
-                estimated << " total)." << std::flush;
-            }
-        }
-        else break;
-    }
-
-    cout << over_count << " of " << seg_info.size() << " nets were overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
     return 1;
 }
 

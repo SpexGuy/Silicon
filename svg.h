@@ -7,6 +7,6 @@
 
 #include "ece556.h"
 
-void writeCongestionSvg(const RoutingInst &inst, const char *filename);
+int writeCongestionSvg(const RoutingInst &inst, const char *filename);
 
 #endif //SILICON_SVG_H
