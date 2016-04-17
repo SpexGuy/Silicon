@@ -24,6 +24,9 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+extern bool applyNetDecomp;
+extern bool useNetOrdering;
+
 void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
     // set up fields
     inst.gx = gx;
@@ -316,7 +319,7 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     cout << "\r" << over_count << " nets routed in " << elapsed << " seconds." << endl;
 }
 
-int solveRouting(RoutingInst &rst) {
+int solveRoutingNew(RoutingInst &rst) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
 
@@ -363,6 +366,48 @@ int solveRouting(RoutingInst &rst) {
     return 1;
 }
 
+int solveRoutingOld(RoutingInst &rst){   
+    for (int n = 0; n < rst.numNets; n++) {
+        if (rst.nets[n].numPins < 2)  continue;
+
+        rst.nets[n].nroute.numSegs = (rst.nets[n].numPins-1)*2;
+        rst.nets[n].nroute.segments = new Segment[rst.nets[n].nroute.numSegs];
+
+        // We're going to build a spine from the first point.
+        Point &first = rst.nets[n].pins[0];
+
+        // for each pin besides the first, make a branch off of the spine
+        for (int c = 1; c < rst.nets[n].numPins; c++) {
+            Point &pin = rst.nets[n].pins[c];
+            int minY = min(pin.y, first.y);
+            int maxY = max(pin.y, first.y);
+            rst.nets[n].nroute.segments[(c-1)*2].p1 = Point{pin.x, minY};
+            rst.nets[n].nroute.segments[(c-1)*2].p2 = Point{pin.x, maxY};
+
+            int minX = min(pin.x, first.x);
+            int maxX = max(pin.x, first.x);
+            rst.nets[n].nroute.segments[c*2-1].p1 = Point{minX, first.y};
+            rst.nets[n].nroute.segments[c*2-1].p2 = Point{maxX, first.y};
+        }
+
+    }
+    return 1;
+}
+
+int solveRouting(RoutingInst &rst) {
+  int returnVal;
+
+  if(!applyNetDecomp && !useNetOrdering){
+    printf("Using old routing algorithm\n");
+    returnVal = solveRoutingOld(rst);
+  }else{
+    printf("Using new routing algorithm\n");
+    returnVal = solveRoutingNew(rst);
+  }
+
+  return returnVal;
+}
+
 inline bool is_straight(int p1ex, int p2ex) {
     return (p1ex & 1) == (p2ex & 1);
 }
@@ -385,11 +430,22 @@ inline void write_segment(ostream &out, RoutingInst &rst, Segment &segment) {
 }
 
 int writeOutput(ostream &out, RoutingInst &rst){
+
+  if(!applyNetDecomp && !useNetOrdering){
+    printf("Using old write output\n");
+  }else{
+    printf("Using new write output\n");
+  }
+
     for (int n = 0; n < rst.numNets; n++) {
         out << 'n' << n << endl;
         for (int c = 0; c < rst.nets[n].nroute.numSegs; c++) {
             if (rst.nets[n].nroute.segments[c].empty()) continue;
-            write_segment(out, rst, rst.nets[n].nroute.segments[c]);
+	    if(!applyNetDecomp && !useNetOrdering){
+	      out << rst.nets[n].nroute.segments[c] << endl;
+	    }else{
+	      write_segment(out, rst, rst.nets[n].nroute.segments[c]);
+	    }
         }
         out << '!' << endl;
     }
