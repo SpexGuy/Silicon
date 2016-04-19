@@ -1,10 +1,10 @@
 // ECE556 - Copyright 2014 University of Wisconsin-Madison.  All Rights Reserved.
 
+#include <assert.h>
+#include <algorithm>
 #include <string>
 #include <sstream>
-#include <assert.h>
 #include <vector>
-#include <algorithm>
 
 #include "ece556.h"
 #include "astar.h"
@@ -25,8 +25,9 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-extern bool applyNetDecomp;
-extern bool useNetOrdering;
+
+
+// ------------------------- readBenchmark --------------------------------
 
 void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
     // set up fields
@@ -64,13 +65,13 @@ inline void apply_blockage(RoutingInst &inst, int x, int y, int ex, int ey, int 
     }
 }
 
-int fail(const char *msg) {
+void fail(const char *msg) {
     cerr << "ERROR: " << msg << endl;
-    return 0;
+    exit(1);
 }
 
-int readBenchmark(istream &in, RoutingInst &rst) {
-    if (!in) return fail("Bad input stream");
+void readBenchmark(istream &in, RoutingInst &rst) {
+    if (!in) return fail("Bad input file");
 
     string line;
     string token;
@@ -145,9 +146,11 @@ int readBenchmark(istream &in, RoutingInst &rst) {
     }
 
     readLUT(); // setup FLUTE
-
-    return 1;
 }
+
+
+
+// ----------------------- Initial Solution ----------------------------
 
 void L_route(RoutingInst &rst, Segment &seg) {
     int minX = min(seg.p1.x, seg.p2.x);
@@ -197,140 +200,6 @@ void L_route(RoutingInst &rst, Segment &seg) {
         }
     }
     assert(edge == (seg.edges + numEdges));
-}
-
-struct SegmentInfo {
-    int overflow;
-    Segment *seg;
-
-    SegmentInfo(Segment *seg) noexcept : seg(seg) {}
-    SegmentInfo(const SegmentInfo &other) noexcept
-            : overflow(other.overflow), seg(other.seg) {}
-    SegmentInfo &operator=(const SegmentInfo &other) noexcept {
-        overflow = other.overflow;
-        seg = other.seg;
-        return *this;
-    }
-};
-
-inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
-    int of = 0;
-    for (int c = 0; c < seg.numEdges; c++) {
-        of += rst.overflow(seg.edges[c]);
-    }
-    return of;
-}
-
-void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
-    // TODO: iteration like this shits all over the L2 cache
-    // (because seg.seg is a ptr and they may be all out of order)
-    for (auto &seg : seg_info) {
-        seg.overflow = calculate_overflow(rst, *seg.seg);
-    }
-}
-
-void ripup(RoutingInst &rst, SegmentInfo &seg) {
-    for (int c = 0; c < seg.seg->numEdges; c++) {
-        rst.edge(seg.seg->edges[c]).utilization--;
-    }
-    delete [] seg.seg->edges;
-    seg.seg->edges = nullptr;
-}
-
-void maze_route(RoutingInst &inst, Segment *pSegment) {
-    assert(pSegment->edges == nullptr);
-
-    Point tl, br;
-    const int bb_size = 20;
-    tl.x = max(0, min(pSegment->p1.x, pSegment->p2.x) - bb_size);
-    tl.y = max(0, min(pSegment->p1.y, pSegment->p2.y) - bb_size);
-    br.x = min(inst.gx, max(pSegment->p1.x, pSegment->p2.x) + 1 + bb_size);
-    br.y = min(inst.gy, max(pSegment->p1.y, pSegment->p2.y) + 1 + bb_size);
-    vector<Point> path;
-    maze_route_p2p(inst, pSegment->p1, pSegment->p2, tl, br, path);
-
-    pSegment->edges = new int[path.size()-1];
-    pSegment->numEdges = path.size() - 1;
-    for (int c = 0; c < path.size()-1; c++) {
-        Point &prev = path[c];
-        Point &curr = path[c+1];
-        if (prev.x == curr.x) {
-            assert(abs(prev.y - curr.y) == 1);
-            if (prev.y < curr.y)
-                pSegment->edges[c] = inst.edge_index(prev.x, prev.y, false);
-            else
-                pSegment->edges[c] = inst.edge_index(curr.x, curr.y, false);
-        } else {
-            assert(prev.y == curr.y);
-            assert(abs(prev.x - curr.x) == 1);
-
-            if (prev.x < curr.x)
-                pSegment->edges[c] = inst.edge_index(prev.x, prev.y, true);
-            else
-                pSegment->edges[c] = inst.edge_index(curr.x, curr.y, true);
-        }
-        inst.edge(pSegment->edges[c]).utilization++;
-    }
-    assert(path.front() == pSegment->p1);
-    assert(path.back()  == pSegment->p2);
-}
-
-void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, time_t time_limit) {
-    cout << "Calculate overflow" << endl;
-    init_overflow(rst, seg_info);
-    std::sort(seg_info.begin(), seg_info.end(),
-              [](const SegmentInfo &a, const SegmentInfo &b) -> bool
-              { return a.overflow > b.overflow; }
-    );
-
-    cout << "Ripup" << endl;
-    int over_count = 0;
-    for (auto &info : seg_info) {
-        if (info.overflow > 0) {
-            ripup(rst, info);
-            over_count++;
-        }
-        else break;
-    }
-    cout << over_count << " of " << seg_info.size() << " nets were overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
-
-    cout << "Reroute" << endl;
-    time_t start_time = time(nullptr);
-    time_t lastElapsed = -1;
-    int routed_count = 0;
-    bool panicked = false;
-    for (auto &info : seg_info) {
-        if (info.overflow > 0) {
-            if (!panicked) {
-                routed_count++;
-
-                maze_route(rst, info.seg);
-
-                // check time remaining
-                time_t now = time(nullptr);
-                time_t elapsed = now - start_time;
-                if (elapsed - lastElapsed >= 1) {
-                    time_t estimated = elapsed * over_count / routed_count;
-                    cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " elapsed, " <<
-                    estimated << " total)." << std::flush;
-                    lastElapsed = elapsed;
-
-                    // panic if we have one minute left, and just L-route everything.
-                    if (time_limit - now < 60) {
-                        cout << "ohcrapohcrapohcrapohcrap runningrunningRUNNING!!!!";
-                        panicked = true;
-                    }
-                }
-            } else {
-                // we are OUT OF TIME! L-route EVERYTHING!!!
-                // TODO: A shittier, faster L-route that doesn't pick the optimal L.
-                L_route(rst, *info.seg);
-            }
-        }
-        else break;
-    }
-    time_t elapsed = time(nullptr) - start_time;
-    cout << "\r" << over_count << " nets routed in " << elapsed << " seconds." << endl;
 }
 
 void routeInitialSolutionShitty(RoutingInst &rst) {
@@ -391,7 +260,143 @@ void routeInitialSolution(RoutingInst &rst) {
     }
 }
 
-int solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
+// -------------------------- solveRouting ------------------------------
+
+struct SegmentInfo {
+    int overflow;
+    Segment *seg;
+
+    SegmentInfo(Segment *seg) noexcept : seg(seg) {}
+    SegmentInfo(const SegmentInfo &other) noexcept
+            : overflow(other.overflow), seg(other.seg) {}
+    SegmentInfo &operator=(const SegmentInfo &other) noexcept {
+        overflow = other.overflow;
+        seg = other.seg;
+        return *this;
+    }
+};
+
+inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
+    int of = 0;
+    for (int c = 0; c < seg.numEdges; c++) {
+        of += rst.overflow(seg.edges[c]);
+    }
+    return of;
+}
+
+void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
+    // TODO: iteration like this shits all over the L2 cache
+    // (because seg.seg is a ptr and they may be all out of order)
+    for (auto &seg : seg_info) {
+        seg.overflow = calculate_overflow(rst, *seg.seg);
+    }
+}
+
+void ripup(RoutingInst &rst, SegmentInfo &seg) {
+    for (int c = 0; c < seg.seg->numEdges; c++) {
+        rst.edge(seg.seg->edges[c]).utilization--;
+    }
+    delete [] seg.seg->edges;
+    seg.seg->edges = nullptr;
+}
+
+void maze_route(RoutingInst &inst, Segment *pSegment) {
+    assert(pSegment->edges == nullptr);
+
+    Point tl, br;
+    const int bb_size = 20;
+    tl.x = max(0, min(pSegment->p1.x, pSegment->p2.x) - bb_size);
+    tl.y = max(0, min(pSegment->p1.y, pSegment->p2.y) - bb_size);
+    br.x = min(inst.gx, max(pSegment->p1.x, pSegment->p2.x) + 1 + bb_size);
+    br.y = min(inst.gy, max(pSegment->p1.y, pSegment->p2.y) + 1 + bb_size);
+    vector<Point> path;
+    maze_route_p2p(inst, pSegment->p1, pSegment->p2, tl, br, path);
+
+    pSegment->edges = new int[path.size()-1];
+    pSegment->numEdges = int(path.size() - 1); // path better not be longer than 2^31
+    for (int c = 0; c < path.size()-1; c++) {
+        Point &prev = path[c];
+        Point &curr = path[c+1];
+        if (prev.x == curr.x) {
+            assert(abs(prev.y - curr.y) == 1);
+            if (prev.y < curr.y)
+                pSegment->edges[c] = inst.edge_index(prev.x, prev.y, false);
+            else
+                pSegment->edges[c] = inst.edge_index(curr.x, curr.y, false);
+        } else {
+            assert(prev.y == curr.y);
+            assert(abs(prev.x - curr.x) == 1);
+
+            if (prev.x < curr.x)
+                pSegment->edges[c] = inst.edge_index(prev.x, prev.y, true);
+            else
+                pSegment->edges[c] = inst.edge_index(curr.x, curr.y, true);
+        }
+        inst.edge(pSegment->edges[c]).utilization++;
+    }
+    assert(path.front() == pSegment->p1);
+    assert(path.back()  == pSegment->p2);
+}
+
+void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, time_t time_limit) {
+    cout << "Calculate overflow" << endl;
+    init_overflow(rst, seg_info);
+    std::sort(seg_info.begin(), seg_info.end(),
+              [](const SegmentInfo &a, const SegmentInfo &b) -> bool
+              { return a.overflow > b.overflow; }
+    );
+
+    cout << "Ripup" << endl;
+    int over_count = 0;
+    for (auto &info : seg_info) {
+        if (info.overflow > 0) {
+            ripup(rst, info);
+            over_count++;
+        }
+        else break;
+    }
+    cout << over_count << " of " << seg_info.size() << " nets were overflowed (" << float(over_count*100)/seg_info.size() << "%)" << endl;
+
+    cout << "Reroute" << endl;
+    time_t start_time = time(nullptr);
+    time_t lastElapsed = -1;
+    int routed_count = 0;
+    bool panicked = false;
+    for (auto &info : seg_info) {
+        if (info.overflow > 0) {
+            if (!panicked) { // hurray for branch prediction!
+                routed_count++;
+
+                maze_route(rst, info.seg);
+
+                // check time remaining
+                time_t now = time(nullptr);
+                time_t elapsed = now - start_time;
+                if (elapsed - lastElapsed >= 1) {
+                    time_t estimated = elapsed * over_count / routed_count;
+                    cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " elapsed, " <<
+                    estimated << " total)." << std::flush;
+                    lastElapsed = elapsed;
+
+                    // panic if we have one minute left, and just L-route everything.
+                    if (time_limit - now < 60) {
+                        cout << "ohcrapohcrapohcrapohcrap runningrunningRUNNING!!!!";
+                        panicked = true;
+                    }
+                }
+            } else {
+                // we are OUT OF TIME! L-route EVERYTHING!!!
+                // TODO: A shittier, faster L-route that doesn't pick the optimal L.
+                L_route(rst, *info.seg);
+            }
+        }
+        else break;
+    }
+    time_t elapsed = time(nullptr) - start_time;
+    cout << "\r" << over_count << " nets routed in " << elapsed << " seconds." << endl;
+}
+
+void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
 
     // find initial solution
     if (shitty_initial)
@@ -421,9 +426,10 @@ int solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
 #endif
         ruarr_iter++;
     }
-
-    return 1;
 }
+
+
+// --------------------------- writeOutput -------------------------------
 
 inline bool is_straight(int p1ex, int p2ex) {
     return (p1ex & 1) == (p2ex & 1);
@@ -446,26 +452,19 @@ inline void write_segment(ostream &out, RoutingInst &rst, Segment &segment) {
     write_line(out, rst, edge, segment.edges[segment.numEdges-1]);
 }
 
-int writeOutput(ostream &out, RoutingInst &rst){
-
-  if(!applyNetDecomp && !useNetOrdering){
-    printf("Using old write output\n");
-  }else{
-    printf("Using new write output\n");
-  }
+void writeOutput(ostream &out, RoutingInst &rst){
+    if (!out) {
+        cerr << "Bad output file" << endl;
+        exit(1);
+    }
 
     for (int n = 0; n < rst.numNets; n++) {
         out << 'n' << n << endl;
         for (int c = 0; c < rst.nets[n].nroute.numSegs; c++) {
             if (rst.nets[n].nroute.segments[c].empty()) continue;
-	    if(!applyNetDecomp && !useNetOrdering){
-	      out << rst.nets[n].nroute.segments[c] << endl;
-	    }else{
-	      write_segment(out, rst, rst.nets[n].nroute.segments[c]);
-	    }
+            write_segment(out, rst, rst.nets[n].nroute.segments[c]);
         }
         out << '!' << endl;
     }
-    return 1;
 }
 

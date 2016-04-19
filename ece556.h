@@ -147,26 +147,22 @@ struct RoutingInst {
     }
 };
 
-inline float usage(const RoutingInst &inst, const Edge &edge) {
-    return float(edge.utilization) / float(inst.cap);
-}
-
 /* int readBenchmark(const char *fileName, routingInst *rst)
    Read in the benchmark file and initialize the routing instance.
    This function needs to populate all fields of the routingInst structure.
    input1: fileName: Name of the benchmark input file
    input2: pointer to the routing instance
-   output: 1 if successful
 */
-int readBenchmark(std::istream &in, RoutingInst &rst);
+void readBenchmark(std::istream &in, RoutingInst &rst);
 
 
 /* int solveRouting(routingInst *rst)
    This function creates a routing solution
-   input: pointer to the routing instance
-   output: 1 if successful, 0 otherwise (e.g. the data structures are not populated) 
+   input1: pointer to the routing instance
+   input2: time at which the routing must be finished
+   input3: whether to do shitty net decomposition
 */
-int solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial);
+void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial);
 
 /* int writeOutput(const char *outRouteFile, routingInst *rst)
    Write the routing solution obtained from solveRouting(). 
@@ -176,11 +172,11 @@ int solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial);
    it is in the correct format and the nets have been correctly routed. The script also reports
    the total wirelength and overflow of your routing solution.
 
-   input1: name of the output file
+   input1: the output file
    input2: pointer to the routing instance
    output: 1 if successful, 0 otherwise 
   */
-int writeOutput(std::ostream &out, RoutingInst &rst);
+void writeOutput(std::ostream &out, RoutingInst &rst);
 
 
 #endif // ECE556_H
