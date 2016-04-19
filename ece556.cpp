@@ -25,6 +25,9 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+extern bool applyNetDecomp;
+extern bool useNetOrdering;
+
 void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
     // set up fields
     inst.gx = gx;
@@ -210,8 +213,6 @@ struct SegmentInfo {
     }
 };
 
-void maze_route(RoutingInst &inst, Segment *pSegment);
-
 inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
     int of = 0;
     for (int c = 0; c < seg.numEdges; c++) {
@@ -274,7 +275,7 @@ void maze_route(RoutingInst &inst, Segment *pSegment) {
     assert(path.back()  == pSegment->p2);
 }
 
-void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, int time_limit) {
+void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, time_t time_limit) {
     cout << "Calculate overflow" << endl;
     init_overflow(rst, seg_info);
     std::sort(seg_info.begin(), seg_info.end(),
@@ -332,11 +333,28 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, int time_l
     cout << "\r" << over_count << " nets routed in " << elapsed << " seconds." << endl;
 }
 
-int solveRouting(RoutingInst &rst, int time_limit) {
+void routeInitialSolutionShitty(RoutingInst &rst) {
+    // just L-route all of the segments
+    for (int n = 0; n < rst.numNets; n++) {
+        int numSegs = rst.nets[n].numPins - 1;
+        Segment *segments = new Segment[numSegs];
+        rst.nets[n].nroute.numSegs = numSegs;
+        rst.nets[n].nroute.segments = segments;
+
+        for (int s = 0; s < numSegs; s++) {
+            segments[s].p1 = rst.nets[n].pins[0];
+            segments[s].p2 = rst.nets[n].pins[s+1];
+            L_route(rst, segments[s]);
+        }
+    }
+}
+
+void routeInitialSolution(RoutingInst &rst) {
+    // Use FLUTE to plot steiner trees for the initial solution
+    // Then L-route the steiner trees
     int xs[MAXD*2];
     int *ys = xs + MAXD;
 
-    vector<SegmentInfo> seg_info;
     for (int n = 0; n < rst.numNets; n++) {
 
         for (int c = 0; c < rst.nets[n].numPins; c++) {
@@ -358,7 +376,6 @@ int solveRouting(RoutingInst &rst, int time_limit) {
 
             rst.nets[n].nroute.segments[numSegs].p1 = Point{base.x, base.y};
             rst.nets[n].nroute.segments[numSegs].p2 = Point{parent.x, parent.y};
-            seg_info.emplace_back(&rst.nets[n].nroute.segments[numSegs]);
             numSegs++;
         }
 
@@ -372,7 +389,25 @@ int solveRouting(RoutingInst &rst, int time_limit) {
 
         free(tree.branch);
     }
+}
 
+int solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
+
+    // find initial solution
+    if (shitty_initial)
+        routeInitialSolutionShitty(rst);
+    else
+        routeInitialSolution(rst);
+
+    // build array of all segments
+    vector<SegmentInfo> seg_info;
+    for (int n = 0; n < rst.numNets; n++) {
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            seg_info.emplace_back(&rst.nets[n].nroute.segments[s]);
+        }
+    }
+
+    // iterate RUaRR until time limit is exceeded
     int ruarr_iter = 1;
     while(time_limit - time(nullptr) > 5*60) {
         cout << "\nBeginning RipupAndReroute iteration " << ruarr_iter << endl;
@@ -386,7 +421,6 @@ int solveRouting(RoutingInst &rst, int time_limit) {
 #endif
         ruarr_iter++;
     }
-    //ripupAndReroute(rst, seg_info);
 
     return 1;
 }
@@ -413,11 +447,22 @@ inline void write_segment(ostream &out, RoutingInst &rst, Segment &segment) {
 }
 
 int writeOutput(ostream &out, RoutingInst &rst){
+
+  if(!applyNetDecomp && !useNetOrdering){
+    printf("Using old write output\n");
+  }else{
+    printf("Using new write output\n");
+  }
+
     for (int n = 0; n < rst.numNets; n++) {
         out << 'n' << n << endl;
         for (int c = 0; c < rst.nets[n].nroute.numSegs; c++) {
             if (rst.nets[n].nroute.segments[c].empty()) continue;
-            write_segment(out, rst, rst.nets[n].nroute.segments[c]);
+	    if(!applyNetDecomp && !useNetOrdering){
+	      out << rst.nets[n].nroute.segments[c] << endl;
+	    }else{
+	      write_segment(out, rst, rst.nets[n].nroute.segments[c]);
+	    }
         }
         out << '!' << endl;
     }

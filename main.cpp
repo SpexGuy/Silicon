@@ -12,18 +12,51 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+bool applyNetDecomp;
+bool useNetOrdering;
+
 int main(int argc, char **argv)
 {
-    if(argc!=3){
-        printf("Usage : %s <input_benchmark_name> <output_file_name> \n", argv[0]);
+    time_t start_time = time(nullptr);
+
+    if(argc!=5){
+        printf("Usage : %s -d=[0-1] -n=[0-1] <input_benchmark_name> <output_file_name> \n", argv[0]);
         return 1;
     }
-    time_t time_limit = time(nullptr) + 20*60; // run for 20 minutes max
 
-	clock_t time, dt;
+    clock_t time, dt;
     int status;
-    char *inputFileName = argv[1];
-    char *outputFileName = argv[2];
+    char *dFlag = argv[1];
+    char *nFlag = argv[2];
+    char *inputFileName = argv[3];
+    char *outputFileName = argv[4];
+
+    if(dFlag[1] != 'd' || nFlag[1] != 'n' || dFlag[0] != '-' || nFlag[0] != '-'
+       || dFlag[2] != '=' || nFlag[2] != '='){
+        printf("Usage : %s -d=[0-1] -n=[0-1] <input_benchmark_name> <output_file_name> \n", argv[0]);
+        return 1;
+    }
+
+    if(!(dFlag[3] == '1' || dFlag[3] == '0') || !(nFlag[3] == '1' || nFlag[3] == '0')){
+        printf("Usage : %s -d=[0-1] -n=[0-1] <input_benchmark_name> <output_file_name> \n", argv[0]);
+        return 1;
+    }
+
+    if(dFlag[3] == '1'){
+      printf("Using net decomposition\n");
+      applyNetDecomp = true;
+    }else{
+      printf("Not using net decomposition\n");
+      applyNetDecomp = false;
+    }
+
+    if(nFlag[3] == '1'){
+      printf("Using net ordering\n");
+      useNetOrdering = true;
+    }else{
+      printf("Not using net ordering\n");
+      useNetOrdering = false;
+    }
 
     /// create a new routing instance
     RoutingInst rst;
@@ -47,7 +80,11 @@ int main(int argc, char **argv)
 
     /// Run actual routing
 	time = clock();
-    status = solveRouting(rst, time_limit);
+
+    time_t end_time = start_time;
+    if (useNetOrdering)
+        end_time += 20*60; // add 20 minutes max for RUARR (it will stop 5 minutes early if possible)
+    status = solveRouting(rst, end_time, !applyNetDecomp);
     if(status==0){
         printf("ERROR: running routing \n");
         exit(1);

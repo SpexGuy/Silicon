@@ -166,7 +166,7 @@ int readBenchmark(std::istream &in, RoutingInst &rst);
    input: pointer to the routing instance
    output: 1 if successful, 0 otherwise (e.g. the data structures are not populated) 
 */
-int solveRouting(RoutingInst &rst, int time_limit);
+int solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial);
 
 /* int writeOutput(const char *outRouteFile, routingInst *rst)
    Write the routing solution obtained from solveRouting(). 
