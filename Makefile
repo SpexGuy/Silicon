@@ -11,14 +11,14 @@ CCC = g++
 # Compiler options                                                              
 # ---------------------------------------------------------------------         
 
-CCOPT = -I ./include -L ./lib -m64 -O -fPIC -fexceptions -DNDEBUG -DIL_STD -g -Wall -std=c++11
+CCOPT = -I ./include -m64 -O -fPIC -fexceptions -DNDEBUG -DIL_STD -g -Wall -std=c++11
 
 # ---------------------------------------------------------------------         
 # Link options and libraries                                                    
 # ---------------------------------------------------------------------         
 
-CCFLAGS = $(CCOPT) 
-CCLNFLAGS = -lm -pthread -lboost_system -lboost_filesystem
+CCFLAGS = $(CCOPT)
+CCLNFLAGS = -lm -pthread
 
 #------------------------------------------------------------                   
 #  make all      : to compile.                                     
@@ -27,30 +27,21 @@ CCLNFLAGS = -lm -pthread -lboost_system -lboost_filesystem
 
 all: ROUTE.exe
 
-ROUTE.exe: main.o ece556.o svg.o lib obj
+ROUTE.exe: main.o ece556.o svg.o obj
 	rm -f ROUTE.exe
 	$(CCC) $(LINKFLAGS) $(CCFLAGS) main.o ece556.o svg.o $(shell find obj -type f) $(CCLNFLAGS) -o ROUTE.exe
 
-main.o: main.cpp ece556.h svg.h include/boost
+main.o: main.cpp ece556.h svg.h
 	rm -f main.o
 	$(CCC) $(CCFLAGS) main.cpp -c
 
-ece556.o: ece556.cpp ece556.h include/boost include/flute
+ece556.o: ece556.cpp ece556.h include/flute
 	rm -f ece556.o
 	$(CCC) $(CCFLAGS) ece556.cpp -c
 
 svg.o: svg.cpp svg.h ece556.h
 	rm -f svg.o
 	$(CCC) $(CCFLAGS) svg.cpp -c
-
-lib: include/boost
-
-include/boost:
-	rm -rf include/boost/
-	rm -rf lib/
-	cd libraries/boost_1_60_0 \
-	 && ./bootstrap.sh --prefix=../.. --with-libraries=filesystem \
-	 && ./b2 link=static install
 
 obj: include/flute
 	rm -rf obj/
@@ -61,7 +52,7 @@ obj: include/flute
 
 include/flute:
 	rm -rf include/flute/
-	mkdir include/flute/
+	mkdir -p include/flute/
 	cp libraries/flute-3.1/*.h include/flute/
 	cp libraries/flute-3.1/*.dat .
 
@@ -71,5 +62,4 @@ clean:
 
 cleanall: clean
 	rm -rf include/
-	rm -rf lib/
 	rm -rf obj/
