@@ -8,6 +8,7 @@
 
 #include "ece556.h"
 #include "astar.h"
+#include "svg.h"
 
 extern "C" {
     #include <flute/flute.h>
@@ -273,7 +274,7 @@ void maze_route(RoutingInst &inst, Segment *pSegment) {
     assert(path.back()  == pSegment->p2);
 }
 
-void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info) {
+void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, int time_limit) {
     cout << "Calculate overflow" << endl;
     init_overflow(rst, seg_info);
     std::sort(seg_info.begin(), seg_info.end(),
@@ -296,18 +297,33 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     time_t start_time = time(nullptr);
     time_t lastElapsed = -1;
     int routed_count = 0;
+    bool panicked = false;
     for (auto &info : seg_info) {
         if (info.overflow > 0) {
-            routed_count++;
+            if (!panicked) {
+                routed_count++;
 
-            maze_route(rst, info.seg);
+                maze_route(rst, info.seg);
 
-            time_t elapsed = time(nullptr) - start_time;
-            if (elapsed - lastElapsed >= 1) {
-                lastElapsed = elapsed;
-                time_t estimated = elapsed * over_count / routed_count;
-                cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " elapsed, " <<
-                estimated << " total)." << std::flush;
+                // check time remaining
+                time_t now = time(nullptr);
+                time_t elapsed = now - start_time;
+                if (elapsed - lastElapsed >= 1) {
+                    time_t estimated = elapsed * over_count / routed_count;
+                    cout << "\rRouted " << routed_count << " of " << over_count << " (" << elapsed << " elapsed, " <<
+                    estimated << " total)." << std::flush;
+                    lastElapsed = elapsed;
+
+                    // panic if we have one minute left, and just L-route everything.
+                    if (time_limit - now < 60) {
+                        cout << "ohcrapohcrapohcrapohcrap runningrunningRUNNING!!!!";
+                        panicked = true;
+                    }
+                }
+            } else {
+                // we are OUT OF TIME! L-route EVERYTHING!!!
+                // TODO: A shittier, faster L-route that doesn't pick the optimal L.
+                L_route(rst, *info.seg);
             }
         }
         else break;
@@ -316,7 +332,7 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     cout << "\r" << over_count << " nets routed in " << elapsed << " seconds." << endl;
 }
 
-int solveRouting(RoutingInst &rst) {
+int solveRouting(RoutingInst &rst, int time_limit) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
 
@@ -357,7 +373,19 @@ int solveRouting(RoutingInst &rst) {
         free(tree.branch);
     }
 
-    ripupAndReroute(rst, seg_info);
+    int ruarr_iter = 1;
+    while(time_limit - time(nullptr) > 5*60) {
+        cout << "\nBeginning RipupAndReroute iteration " << ruarr_iter << endl;
+        ripupAndReroute(rst, seg_info, time_limit);
+#ifndef NDEBUG
+        stringstream filename;
+        filename << "intermediate-" << ruarr_iter << ".html";
+        string str = filename.str();
+        int overflow = writeCongestionSvg(rst, str.c_str());
+        cout << "Overflow: " << overflow << endl;
+#endif
+        ruarr_iter++;
+    }
     //ripupAndReroute(rst, seg_info);
 
     return 1;

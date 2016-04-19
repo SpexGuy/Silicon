@@ -14,11 +14,11 @@ using std::endl;
 
 int main(int argc, char **argv)
 {
-
     if(argc!=3){
         printf("Usage : %s <input_benchmark_name> <output_file_name> \n", argv[0]);
         return 1;
     }
+    time_t time_limit = time(nullptr) + 20*60; // run for 20 minutes max
 
 	clock_t time, dt;
     int status;
@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 
     /// Run actual routing
 	time = clock();
-    status = solveRouting(rst);
+    status = solveRouting(rst, time_limit);
     if(status==0){
         printf("ERROR: running routing \n");
         exit(1);
