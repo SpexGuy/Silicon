@@ -499,7 +499,6 @@ void writeOutput(ostream &out, RoutingInst &rst){
     for (int n = 0; n < rst.numNets; n++) {
         out << 'n' << n << endl;
         for (int c = 0; c < rst.nets[n].nroute.numSegs; c++) {
-            if (rst.nets[n].nroute.segments[c].empty()) continue;
             write_segment(out, rst, rst.nets[n].nroute.segments[c]);
         }
         out << '!' << endl;

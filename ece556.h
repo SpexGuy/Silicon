@@ -39,10 +39,6 @@ struct Segment {
     int numEdges ; 	/* number of edges in the segment*/
     int *edges ;  	/* array of edges representing the segment*/
 
-    inline bool empty() {
-        return p1 == p2;
-    }
-
     inline Segment &operator=(const Segment &other) {
         numEdges = other.numEdges;
         edges = new int[numEdges];
