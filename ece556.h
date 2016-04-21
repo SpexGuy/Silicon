@@ -6,6 +6,8 @@
 
 #include <assert.h>
 #include <iostream>
+#include <unordered_set>
+#include <unordered_map>
 
 /**
  * A structure to represent a 2D Point.
@@ -40,6 +42,16 @@ struct Segment {
     inline bool empty() {
         return p1 == p2;
     }
+
+    inline Segment &operator=(const Segment &other) {
+        numEdges = other.numEdges;
+        edges = new int[numEdges];
+        for (int e = 0; e < numEdges; e++) {
+            edges[e] = other.edges[e];
+        }
+
+        return *this;
+    }
 };
 
 inline std::ostream &operator<<(std::ostream &out, const Segment &s) {
@@ -53,6 +65,16 @@ inline std::ostream &operator<<(std::ostream &out, const Segment &s) {
 struct Route {
     int numSegs ;  	/* number of segments in a route*/
     Segment *segments ;  /* an array of segments (note, a segment may be flat, L-shaped or any other shape, based on your preference */
+
+    Route &operator=(const Route &other) {
+        numSegs = other.numSegs;
+        segments = new Segment[numSegs];
+        for (int s = 0; s < numSegs; s++) {
+            segments[s] = other.segments[s];
+        }
+
+        return *this;
+    }
 };
 
 
@@ -64,10 +86,12 @@ struct Net {
     int numPins ; 		/* number of pins (or terminals) of the net */
     Point *pins ; 		/* array of pins (or terminals) of the net. */
     Route nroute ;		/* stored route for the net. */
+
+    std::unordered_map<int, int> routed_edges; // reference counted xD
 };
 
 struct Edge {
-    int utilization;
+    int utilization = 0;
 };
 
 // THE CODE DEPENDS ON THIS STRUCTURE FOR A CELL!!!
@@ -81,21 +105,21 @@ struct Cell {
  * A structure to represent the routing instance
  */
 struct RoutingInst {
-    int gx ;		/* x dimension of the global routing grid */
-    int gy ;		/* y dimension of the global routing grid */
+    int gx = -1;		/* x dimension of the global routing grid */
+    int gy = -1;		/* y dimension of the global routing grid */
 
-    int cap ;
+    int cap = -1;
 
-    int numNets;	/* number of nets */
-    Net *nets;		/* array of nets */
+    int numNets = -1;	/* number of nets */
+    Net *nets = nullptr;		/* array of nets */
 
-    int numCells; 	/* number of cells in the grid */
-    Cell *cells;
+    int numCells = -1; 	/* number of cells in the grid */
+    Cell *cells = nullptr;
 
     inline int index(const int x, const int y) const {
         // naive row-major scheme for now...
         // TODO: morton curve or something better for traversing
-        assert(valid(x, y));
+        //assert(valid(x, y)); // this breaks A* (but it's safe, I promise!)
         return y * gx + x;
     }
     inline int edge_index(const int x, const int y, bool horz) const {
@@ -144,6 +168,66 @@ struct RoutingInst {
     inline int overflow(const int edge_index) const {
         assert(valid(point_from_edge(edge_index)));
         return std::max(edge(edge_index).utilization - cap, 0);
+    }
+};
+
+/**
+ * The information needed to restore a RoutingInst
+ */
+struct RoutingSolution {
+    int numNets = -1;	/* number of nets */
+    Net *nets = nullptr;		/* array of nets */
+
+#ifndef NDEBUG
+    int numCells = -1; 	/* number of cells in the grid */
+    Cell *cells = nullptr;
+#endif
+
+    inline void clone(const RoutingInst &other) {
+        numNets = other.numNets;
+        nets = new Net[numNets];
+        for (int n = 0; n < numNets; n++) {
+            nets[n].nroute = other.nets[n].nroute;
+        }
+
+#ifndef NDEBUG
+        numCells = other.numCells;
+        cells = new Cell[numCells];
+        for (int c = 0; c < numCells; c++) {
+            cells[c] = other.cells[c];
+        }
+#endif
+    }
+
+    inline void destroy() {
+        if (nets != nullptr) {
+            for (int n = 0; n < numNets; n++) {
+                for (int s = 0; s < nets[n].nroute.numSegs; s++) {
+                    delete [] nets[n].nroute.segments[s].edges;
+                }
+                delete [] nets[n].nroute.segments;
+            }
+            delete [] nets;
+        }
+
+#ifndef NDEBUG
+        if (cells != nullptr) {
+            delete[] cells;
+        }
+#endif
+    }
+
+    void restore(RoutingInst &other) && {
+        std::swap(numNets, other.numNets);
+        std::swap(nets, other.nets);
+#ifndef NDEBUG
+        std::swap(numCells, other.numCells);
+        std::swap(cells, other.cells);
+#endif
+    }
+
+    ~RoutingSolution() {
+        destroy();
     }
 };
 

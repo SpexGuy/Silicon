@@ -37,19 +37,8 @@ void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
     inst.numNets = nets;
     inst.numCells = gx*gy;
 
-    // allocate nets and cells from the same memory block, for cache efficiency.
-    size_t net_size = nets * sizeof(Net);
-    size_t num_bytes = net_size + (gx*gy) * sizeof(Cell);
-
-    char *memory = new char[num_bytes];
-    inst.nets = reinterpret_cast<Net *>(memory);
-    inst.cells = reinterpret_cast<Cell *>(memory + net_size);
-
-    // initialize grid cells with cap.
-    for (int c = 0; c < inst.numCells; c++) {
-        inst.cells[c].right.utilization = 0;
-        inst.cells[c].down.utilization = 0;
-    }
+    inst.nets = new Net[nets];
+    inst.cells = new Cell[gx*gy];
 }
 
 inline void apply_blockage(RoutingInst &inst, int x, int y, int ex, int ey, int new_cap) {
@@ -152,7 +141,27 @@ void readBenchmark(istream &in, RoutingInst &rst) {
 
 // ----------------------- Initial Solution ----------------------------
 
-void L_route(RoutingInst &rst, Segment &seg) {
+void use_edge(RoutingInst &inst, Net &net, int edge) {
+    auto result = net.routed_edges.emplace(edge, 1);
+    if (result.second) {
+        inst.edge(edge).utilization++;
+    } else {
+        result.first->second++;
+    }
+}
+
+void ripup_edge(RoutingInst &inst, Net &net, int edge) {
+    auto result = net.routed_edges.find(edge);
+    assert(result != net.routed_edges.end());
+
+    result->second--;
+    if (result->second == 0) {
+        net.routed_edges.erase(result);
+        inst.edge(edge).utilization--;
+    }
+}
+
+void L_route(RoutingInst &rst, Net &net, Segment &seg) {
     int minX = min(seg.p1.x, seg.p2.x);
     int maxX = max(seg.p1.x, seg.p2.x);
     int minY = min(seg.p1.y, seg.p2.y);
@@ -175,27 +184,27 @@ void L_route(RoutingInst &rst, Segment &seg) {
     int numEdges = seg.numEdges = abs(seg.p1.x-seg.p2.x)+abs(seg.p1.y-seg.p2.y);
     int *edge = seg.edges = new int[numEdges];
 
-    // mark more expensive L
-    if (bxpy_cost > bypx_cost) {
+    // mark less expensive L
+    if (bxpy_cost < bypx_cost) {
         for (int x = minX; x < maxX; x++) {
-            rst.cell(x, seg.p2.y).right.utilization++;
             *edge = rst.edge_index(x, seg.p2.y, true);
+            use_edge(rst, net, *edge);
             edge++;
         }
         for (int y = minY; y < maxY; y++) {
-            rst.cell(seg.p1.x, y).down.utilization++;
             *edge = rst.edge_index(seg.p1.x, y, false);
+            use_edge(rst, net, *edge);
             edge++;
         }
     } else {
         for (int x = minX; x < maxX; x++) {
-            rst.cell(x, seg.p1.y).right.utilization++;
             *edge = rst.edge_index(x, seg.p1.y, true);
+            use_edge(rst, net, *edge);
             edge++;
         }
         for (int y = minY; y < maxY; y++) {
-            rst.cell(seg.p2.x, y).down.utilization++;
             *edge = rst.edge_index(seg.p2.x, y, false);
+            use_edge(rst, net, *edge);
             edge++;
         }
     }
@@ -213,7 +222,7 @@ void routeInitialSolutionShitty(RoutingInst &rst) {
         for (int s = 0; s < numSegs; s++) {
             segments[s].p1 = rst.nets[n].pins[0];
             segments[s].p2 = rst.nets[n].pins[s+1];
-            L_route(rst, segments[s]);
+            L_route(rst, rst.nets[n], segments[s]);
         }
     }
 }
@@ -253,7 +262,7 @@ void routeInitialSolution(RoutingInst &rst) {
         rst.nets[n].nroute.numSegs = numSegs;
 
         for (int s = 0; s < numSegs; s++) {
-            L_route(rst, rst.nets[n].nroute.segments[s]);
+            L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s]);
         }
 
         free(tree.branch);
@@ -264,13 +273,15 @@ void routeInitialSolution(RoutingInst &rst) {
 
 struct SegmentInfo {
     int overflow;
+    Net *net;
     Segment *seg;
 
-    SegmentInfo(Segment *seg) noexcept : seg(seg) {}
+    SegmentInfo(Net *net, Segment *seg) noexcept : net(net), seg(seg) {}
     SegmentInfo(const SegmentInfo &other) noexcept
-            : overflow(other.overflow), seg(other.seg) {}
+            : overflow(other.overflow), net(other.net), seg(other.seg) {}
     SegmentInfo &operator=(const SegmentInfo &other) noexcept {
         overflow = other.overflow;
+        net = other.net;
         seg = other.seg;
         return *this;
     }
@@ -280,6 +291,15 @@ inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
     int of = 0;
     for (int c = 0; c < seg.numEdges; c++) {
         of += rst.overflow(seg.edges[c]);
+    }
+    return of;
+}
+
+inline int calculate_total_overflow(const RoutingInst &rst) {
+    int of = 0;
+    for (int c = 0; c < rst.numCells; c++) {
+        of += max(0, rst.cells[c].right.utilization - rst.cap);
+        of += max(0, rst.cells[c].down.utilization - rst.cap);
     }
     return of;
 }
@@ -294,13 +314,13 @@ void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
 
 void ripup(RoutingInst &rst, SegmentInfo &seg) {
     for (int c = 0; c < seg.seg->numEdges; c++) {
-        rst.edge(seg.seg->edges[c]).utilization--;
+        ripup_edge(rst, *seg.net, seg.seg->edges[c]);
     }
     delete [] seg.seg->edges;
     seg.seg->edges = nullptr;
 }
 
-void maze_route(RoutingInst &inst, Segment *pSegment) {
+void maze_route(RoutingInst &inst, Net *net, Segment *pSegment) {
     assert(pSegment->edges == nullptr);
 
     Point tl, br;
@@ -310,7 +330,7 @@ void maze_route(RoutingInst &inst, Segment *pSegment) {
     br.x = min(inst.gx, max(pSegment->p1.x, pSegment->p2.x) + 1 + bb_size);
     br.y = min(inst.gy, max(pSegment->p1.y, pSegment->p2.y) + 1 + bb_size);
     vector<Point> path;
-    maze_route_p2p(inst, pSegment->p1, pSegment->p2, tl, br, path);
+    maze_route_p2p(inst, *net, pSegment->p1, pSegment->p2, tl, br, path);
 
     pSegment->edges = new int[path.size()-1];
     pSegment->numEdges = int(path.size() - 1); // path better not be longer than 2^31
@@ -332,7 +352,7 @@ void maze_route(RoutingInst &inst, Segment *pSegment) {
             else
                 pSegment->edges[c] = inst.edge_index(curr.x, curr.y, true);
         }
-        inst.edge(pSegment->edges[c]).utilization++;
+        use_edge(inst, *net, pSegment->edges[c]);
     }
     assert(path.front() == pSegment->p1);
     assert(path.back()  == pSegment->p2);
@@ -367,7 +387,7 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, time_t tim
             if (!panicked) { // hurray for branch prediction!
                 routed_count++;
 
-                maze_route(rst, info.seg);
+                maze_route(rst, info.net, info.seg);
 
                 // check time remaining
                 time_t now = time(nullptr);
@@ -387,7 +407,7 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, time_t tim
             } else {
                 // we are OUT OF TIME! L-route EVERYTHING!!!
                 // TODO: A shittier, faster L-route that doesn't pick the optimal L.
-                L_route(rst, *info.seg);
+                L_route(rst, *info.net, *info.seg);
             }
         }
         else break;
@@ -408,23 +428,41 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
     vector<SegmentInfo> seg_info;
     for (int n = 0; n < rst.numNets; n++) {
         for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
-            seg_info.emplace_back(&rst.nets[n].nroute.segments[s]);
+            seg_info.emplace_back(&rst.nets[n], &rst.nets[n].nroute.segments[s]);
         }
     }
 
     // iterate RUaRR until time limit is exceeded
-    int ruarr_iter = 1;
+    RoutingSolution currentBest;
+    int currentBestOverflow;
+
+    int overflow = calculate_total_overflow(rst);
+
+    int ruarr_iter = 0;
     while(time_limit - time(nullptr) > 5*60) {
-        cout << "\nBeginning RipupAndReroute iteration " << ruarr_iter << endl;
-        ripupAndReroute(rst, seg_info, time_limit);
 #ifndef NDEBUG
         stringstream filename;
         filename << "intermediate-" << ruarr_iter << ".html";
         string str = filename.str();
-        int overflow = writeCongestionSvg(rst, str.c_str());
-        cout << "Overflow: " << overflow << endl;
+        writeCongestionSvg(rst, str.c_str());
 #endif
+
         ruarr_iter++;
+
+        cout << "Overflow: " << overflow << endl;
+        currentBestOverflow = overflow;
+        currentBest.clone(rst);
+
+        cout << "\nBeginning RipupAndReroute iteration " << ruarr_iter << endl;
+        ripupAndReroute(rst, seg_info, time_limit);
+
+        overflow = calculate_total_overflow(rst);
+
+        if (overflow >= currentBestOverflow) {
+            cout << "Overflow no longer decreasing!" << endl;
+            std::move(currentBest).restore(rst);
+            break;
+        }
     }
 }
 

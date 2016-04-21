@@ -62,11 +62,18 @@ namespace std {
 typedef std::unordered_map<Point, AStarDomainRecord> Domain;
 typedef std::priority_queue<AStarFrontierRecord> Frontier;
 
+inline int default_cost(const RoutingInst &inst, int edge) {
+    int newcost = inst.edge(edge).utilization + 1;
+    if (newcost > inst.cap)
+        newcost += (newcost - inst.cap) * OVERFLOW_EXPENSE;
+    return newcost;
+}
+
 // H(Point) is a lambda which returns the heuristic value h(x) for a point x.
 // G(Point) is a lambda which returns true iff the given point is a goal point.
 // Returns the cost of the solution
-template<typename H, typename G, typename V>
-inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal, V valid, int estimate) {
+template<typename H, typename G, typename V, typename C>
+inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point> &path, H heuristic, G is_goal, V valid, C cost, int estimate) {
     assert(path.empty());
     long worstNodes = estimate * estimate;
 
@@ -99,40 +106,40 @@ inline int AStar(const RoutingInst &inst, Frontier &frontier, std::vector<Point>
         }
         explored.emplace(current.self, current);
 
-        Point right{current.self.x+1, current.self.y  };
-        Point down {current.self.x  , current.self.y+1};
-        Point left {current.self.x-1, current.self.y  };
-        Point up   {current.self.x  , current.self.y-1};
+        Point right_pt{current.self.x+1, current.self.y  };
+        Point down_pt {current.self.x  , current.self.y+1};
+        Point left_pt {current.self.x-1, current.self.y  };
+        Point up_pt   {current.self.x  , current.self.y-1};
+        int right = inst.edge_index(current.self.x, current.self.y, true );
+        int down  = inst.edge_index(current.self.x, current.self.y, false);
+        int left  = inst.edge_index(left_pt.x     , left_pt.y     , true );
+        int up    = inst.edge_index(up_pt.x       , up_pt.y       , false);
 
-        #define astar_add_child(child, util_pt, util_dir) do { \
-            if (child == current.parent) continue; \
-            if (!valid(child)) continue; \
-            \
-            int newcost = inst.cell(util_pt).util_dir.utilization + 1; \
-            if (newcost > inst.cap) \
-                newcost += (newcost-inst.cap) * OVERFLOW_EXPENSE; \
-            \
-            int cost = current.cost + newcost; \
-            auto it = explored.find(child); \
-            if (it != explored.end()) { \
-                assert(it->second.cost <= cost); \
-                continue; \
-            } \
-            frontier.emplace(current.self, child, cost, heuristic(child)); \
-        } while(0)
+        auto astar_add_child = [&](Point child, int edge) {
+            if (child == current.parent) return;
+            if (!valid(child)) return;
 
-        astar_add_child(right, current.self, right);
-        astar_add_child(down , current.self, down );
-        astar_add_child(left , left        , right);
-        astar_add_child(up   , up          , down );
+            int newcost = cost(edge);
 
-        #undef astar_add_child
+            int total_cost = current.cost + newcost;
+            auto it = explored.find(child);
+            if (it != explored.end()) {
+                assert(it->second.cost <= total_cost);
+                return;
+            }
+            frontier.emplace(current.self, child, total_cost, heuristic(child));
+        };
+
+        astar_add_child(right_pt, right);
+        astar_add_child(down_pt , down );
+        astar_add_child(left_pt , left );
+        astar_add_child(up_pt   , up   );
     }
     assert(false);
     return -1;
 }
 
-inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Point &end, const Point &tl, const Point &br, std::vector<Point> &path) {
+inline int maze_route_p2p(const RoutingInst &inst, const Net &net, const Point &start, const Point &end, const Point &tl, const Point &br, std::vector<Point> &path) {
     assert(inst.valid(start));
     assert(inst.valid(end));
 
@@ -142,6 +149,12 @@ inline int maze_route_p2p(const RoutingInst &inst, const Point &start, const Poi
                  [end](const Point p) -> int  {return abs(p.x-end.x) + abs(p.y-end.y);},
                  [end](const Point p) -> bool {return p == end;},
                  [tl, br](const Point p) -> bool {return p.x >= tl.x && p.y >= tl.y && p.x < br.x && p.y < br.y;},
+                 [&inst, &net](const int e) -> int {
+                     if (net.routed_edges.find(e) != net.routed_edges.end()) {
+                         return 1; // just wirelength, no overflow cost
+                     }
+                     return default_cost(inst, e);
+                 },
                  abs(start.x - end.x) + abs(start.y - end.y));
 }
 
