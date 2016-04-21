@@ -217,7 +217,7 @@ struct RoutingSolution {
 #endif
     }
 
-    void restore(RoutingInst &other) && {
+    void restore(RoutingInst &other) {
         std::swap(numNets, other.numNets);
         std::swap(nets, other.nets);
 #ifndef NDEBUG
