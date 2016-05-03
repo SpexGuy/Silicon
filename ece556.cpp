@@ -12,6 +12,9 @@
 
 extern "C" {
     #include <flute/flute.h>
+   #undef min
+   #undef max
+   #undef abs
 }
 
 
@@ -24,6 +27,9 @@ using std::stringstream;
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::min;
+using std::max;
+using std::abs;
 
 
 
@@ -436,10 +442,21 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
     RoutingSolution currentBest;
     int currentBestOverflow;
 
+    time_t startTime = time(nullptr);
+    time_t lastTime = startTime; 
+    int currentOverflow = 0;
+    time_t currentTime = startTime;
     int overflow = calculate_total_overflow(rst);
+    int lastOverflow = overflow;
+    double timeChange = 0;
+    double overflowChange = 0;
+    double expectedQ = 0;
+    double currentQ = 0;
+    int secsIn15Min = 15*60;
+    int secsIn5Min = 5*60;
 
     int ruarr_iter = 0;
-    while(time_limit - time(nullptr) > 5*60) {
+    while(time_limit - time(nullptr) > 60) {
 #ifndef NDEBUG
         stringstream filename;
         filename << "intermediate-" << ruarr_iter << ".html";
@@ -457,12 +474,20 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
         ripupAndReroute(rst, seg_info, time_limit);
 
         overflow = calculate_total_overflow(rst);
-
+	currentTime = time(nullptr);
+	currentOverflow = overflow;
+	timeChange = (double)(currentTime - lastTime);
+	overflowChange = (double)(currentOverflow - lastOverflow);
+	currentQ = currentOverflow*(1 + ((currentTime - startTime)/secsIn15Min));
+	expectedQ = (currentOverflow + overflowChange)*(1 + ((currentTime - startTime + timeChange)/secsIn15Min)); 
         if (overflow >= currentBestOverflow) {
-            cout << "Overflow no longer decreasing!" << endl;
-            std::move(currentBest).restore(rst);
-            break;
-        }
+	  cout << "Overflow no longer decreasing!" << endl;
+	  std::move(currentBest).restore(rst);
+	  break;
+        }else if((expectedQ >= currentQ) && ((currentTime - startTime) >= secsIn5Min)){
+	  cout << "Overflow not decreasing fast enough!" << endl;
+	  break;
+	}
     }
 }
 

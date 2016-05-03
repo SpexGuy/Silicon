@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     /// Run actual routing
     time_t end_time = start_time;
     if (useNetOrdering)
-        end_time += 20*60; // add 20 minutes max for RUARR (it will stop 5 minutes early if possible)
+        end_time += 30*60; // add 30 minutes max for RUARR (it will stop 1 minutes early if possible)
 
     TIME(solveRouting(rst, end_time, !applyNetDecomp));
     cout << "Routed in " << (dt * 1000)/CLOCKS_PER_SEC << " ms." << endl;
