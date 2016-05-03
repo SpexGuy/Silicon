@@ -8,7 +8,7 @@
 #define REMOVE_DUPLICATE_PIN 0  // Remove dup. pin for flute_wl() & flute()
 
 #ifndef DTYPE   // Data type for distance
-#define DTYPE float
+#define DTYPE int
 #endif
 
 

@@ -25,6 +25,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+const int FLUTE_SCALE = 10000;
 
 const bool useCongestionAwareInitial = false;
 const bool useCongestionAwareTreeGen = true;
@@ -252,8 +253,8 @@ void make_segments(Net &net, Tree &tree) {
         Branch &parent = tree.branch[base.n];
         if (base.x == parent.x && base.y == parent.y) continue;
 
-        net.nroute.segments[numSegs].p1 = Point{int(base.x), int(base.y)};
-        net.nroute.segments[numSegs].p2 = Point{int(parent.x), int(parent.y)};
+        net.nroute.segments[numSegs].p1 = Point{base.x, base.y};
+        net.nroute.segments[numSegs].p2 = Point{parent.x, parent.y};
         numSegs++;
     }
 
@@ -262,8 +263,8 @@ void make_segments(Net &net, Tree &tree) {
 }
 
 void flute_calculate_segments(RoutingInst &rst) {
-    float xs[MAXD*2];
-    float *ys = xs + MAXD;
+    int xs[MAXD*2];
+    int *ys = xs + MAXD;
 
     for (int n = 0; n < rst.numNets; n++) {
 
@@ -369,127 +370,21 @@ void routeInitialSolution(RoutingInst &rst) {
 // -------------- rerouteCongestionAwareInitialSolution -----------------
 
 template<bool horz>
-float calculate_average_congestion(const RoutingInst &rst, int minx, int miny, int maxx, int maxy) {
+int calculate_average_congestion(const RoutingInst &rst, int minx, int miny, int maxx, int maxy) {
     if (maxx == minx || maxy == miny) return 0;
 
     int total_congestion = 0;
     for (int y = miny; y < maxy; y++) {
         for (int x = minx; x < maxx; x++) {
-            total_congestion += float(rst.edge(rst.edge_index(x, y, horz)).utilization);
+            total_congestion += rst.edge(rst.edge_index(x, y, horz)).utilization;
         }
     }
 
-    return float(total_congestion) / rst.cap / ((maxx - minx) * (maxy - miny));
+    if (horz)
+        return (FLUTE_SCALE * total_congestion) / (rst.cap * (maxy - miny)) + 1;
+    else
+        return (FLUTE_SCALE * total_congestion) / (rst.cap * (maxx - minx)) + 1;
 }
-
-inline bool float_equals(float a, float b) {
-    const float EPSILON = 10e-10;
-    return abs(a-b) < EPSILON;
-}
-
-void rerouteCongestionAwareInitialSolution(RoutingInst &rst) {
-    // TODO: This redoes a lot of the work that FLUTE does.
-    // If we need to make this faster, we can save off the sorted array and pass it into FLUTE.
-    // beware: this is a lot of memory (like 8 pages).  Hopefully it doesn't segfault or stack overflow.
-
-    // note MAXD = 800
-    int xs[MAXD];
-    int ys[MAXD];
-    int xp[MAXD];
-    int yp[MAXD];
-    int xpr[MAXD];
-    int ypr[MAXD];
-    float xscales[MAXD-1];
-    float yscales[MAXD-1];
-    float adjusted_xs[MAXD];
-    float adjusted_ys[MAXD];
-
-    for (int n = 0; n < rst.numNets; n++) {
-        int p;
-        for (p = 0; p < rst.nets[n].numPins; p++) {
-            xs[p] = rst.nets[n].pins[p].x;
-            ys[p] = rst.nets[n].pins[p].y;
-            xp[p] = p;
-            yp[p] = p;
-        }
-
-        // setup xp and yp as sorted permutations for x and y
-        std::sort(xp, xp+p, [xs](const int a, const int b) -> bool {return xs[a] < xs[b];});
-        std::sort(yp, yp+p, [ys](const int a, const int b) -> bool {return ys[a] < ys[b];});
-
-        // setup xpr and ypr as reverse permutations of xp and yp
-        for (int c = 0; c < p; c++) {
-            xpr[xp[c]] = c;
-            ypr[yp[c]] = c;
-        }
-
-        // calculate the average congestion values to be used as scales
-        for (int c = 0; c < p-1; c++) {
-            xscales[c] = calculate_average_congestion<true>(rst, xs[xp[c]], ys[yp[0]], xs[xp[c+1]], ys[yp[p-1]]);
-            yscales[c] = calculate_average_congestion<false>(rst, xs[xp[0]], ys[yp[c]], xs[xp[p-1]], ys[yp[c+1]]);
-        }
-
-        // setup adjusted_xs and adjusted_ys as the warped points
-        float xPos = 0, yPos = 0;
-        for (int c = 0; c < p; c++) {
-            adjusted_xs[xpr[c]] = xPos;
-            adjusted_ys[ypr[c]] = yPos;
-            xPos += xscales[c];
-            yPos += yscales[c];
-        }
-
-        // calculate the steiner tree for the warped points
-        Tree t = flute(p, adjusted_xs, adjusted_ys, ACCURACY);
-
-        // now map that tree back onto the indexes.
-        // yeah, this is O(n^2). I can't think of a better way to do it.
-        xPos = 0;
-        yPos = 0;
-        for (int c = 0; c < p; c++) {
-            for (int d = 0; d < t.deg*2-2; d++) {
-                if (float_equals(t.branch[d].x, xPos))
-                    t.branch[d].x = -xpr[c]-1;
-                if (float_equals(t.branch[d].y, yPos))
-                    t.branch[d].y = -xpr[c]-1;
-            }
-
-            xPos += xscales[c];
-            yPos += yscales[c];
-        }
-
-        // then map those indexes onto the points
-        for (int d = 0; d < t.deg*2-2; d++) {
-            assert(t.branch[d].x < 0); // make sure we actually mapped all the points
-            assert(t.branch[d].y < 0);
-
-            t.branch[d].x = xs[-int(t.branch[d].x)-1];
-            t.branch[d].y = ys[-int(t.branch[d].y)-1];
-        }
-
-        // clear up the segments in the existing solution
-        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
-            delete [] rst.nets[n].nroute.segments[s].edges;
-        }
-        delete [] rst.nets[n].nroute.segments;
-
-        // finally, map the tree onto segments.
-        make_segments(rst.nets[n], t);
-
-        // and then clean up memory
-        free(t.branch);
-    }
-
-    // Now that we have all the segments, clear the congestion map...
-    for (int c = 0; c < rst.gx * rst.gy; c++) {
-        rst.cells[c].right.utilization = 0;
-        rst.cells[c].down.utilization = 0;
-    }
-
-    // ... and reroute
-    L_route_all(rst);
-}
-
-// -------------------------- solveRouting ------------------------------
 
 struct SegmentInfo {
     int overflow;
@@ -506,6 +401,108 @@ struct SegmentInfo {
         return *this;
     }
 };
+
+void ripup(RoutingInst &rst, const SegmentInfo &seg) {
+    for (int c = 0; c < seg.seg->numEdges; c++) {
+        ripup_edge(rst, *seg.net, seg.seg->edges[c]);
+    }
+    delete [] seg.seg->edges;
+    seg.seg->edges = nullptr;
+}
+
+void rerouteCongestionAwareInitialSolution(RoutingInst &rst) {
+    // TODO: This redoes a lot of the work that FLUTE does.
+    // If we need to make this faster, we can save off the sorted array and pass it into FLUTE.
+    // beware: this is a lot of memory (like 8 pages).  Hopefully it doesn't segfault or stack overflow.
+
+    // note MAXD = 800
+    int xs[MAXD];
+    int ys[MAXD];
+    int xp[MAXD];
+    int yp[MAXD];
+    int xscales[MAXD-1];
+    int yscales[MAXD-1];
+    int adjusted_xs[MAXD];
+    int adjusted_ys[MAXD];
+
+    for (int n = 0; n < rst.numNets; n++) {
+        int p;
+        for (p = 0; p < rst.nets[n].numPins; p++) {
+            xs[p] = rst.nets[n].pins[p].x;
+            ys[p] = rst.nets[n].pins[p].y;
+            xp[p] = p;
+            yp[p] = p;
+        }
+
+        // setup xp and yp as sorted permutations for x and y
+        std::sort(xp, xp+p, [xs](const int a, const int b) -> bool {return xs[a] < xs[b];});
+        std::sort(yp, yp+p, [ys](const int a, const int b) -> bool {return ys[a] < ys[b];});
+
+        // calculate the average congestion values to be used as scales
+        for (int c = 0; c < p-1; c++) {
+            xscales[c] = calculate_average_congestion<true>(rst, xs[xp[c]], ys[yp[0]], xs[xp[c+1]], ys[yp[p-1]]);
+            yscales[c] = calculate_average_congestion<false>(rst, xs[xp[0]], ys[yp[c]], xs[xp[p-1]], ys[yp[c+1]]);
+        }
+
+        // setup adjusted_xs and adjusted_ys as the warped points
+        int xPos = 0, yPos = 0;
+        for (int c = 0; c < p; c++) {
+            adjusted_xs[xp[c]] = xPos;
+            adjusted_ys[yp[c]] = yPos;
+            xPos += xscales[c];
+            yPos += yscales[c];
+        }
+
+        // calculate the steiner tree for the warped points
+        Tree t = flute(p, adjusted_xs, adjusted_ys, ACCURACY);
+
+        // now map that tree back onto the indexes.
+        // yeah, this is O(n^2). I can't think of a better way to do it.
+        xPos = 0;
+        yPos = 0;
+        for (int c = 0; c < p; c++) {
+            for (int d = 0; d < t.deg*2-2; d++) {
+                if (t.branch[d].x == xPos)
+                    t.branch[d].x = -c-1;
+                if (t.branch[d].y == yPos)
+                    t.branch[d].y = -c-1;
+            }
+
+            xPos += xscales[c];
+            yPos += yscales[c];
+        }
+
+
+
+        // then map those indexes onto the points
+        for (int d = 0; d < t.deg*2-2; d++) {
+            assert(t.branch[d].x < 0); // make sure we actually mapped all the points
+            assert(t.branch[d].y < 0);
+
+            t.branch[d].x = xs[xp[-t.branch[d].x-1]];
+            t.branch[d].y = ys[yp[-t.branch[d].y-1]];
+        }
+
+        // clear up the segments in the existing solution
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            ripup(rst, SegmentInfo(&rst.nets[n], &rst.nets[n].nroute.segments[s]));
+        }
+        delete [] rst.nets[n].nroute.segments;
+
+        // finally, map the tree onto segments.
+        make_segments(rst.nets[n], t);
+
+        // and route it
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s]);
+        }
+
+        // and then clean up memory
+        free(t.branch);
+    }
+}
+
+// -------------------------- solveRouting ------------------------------
 
 inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
     int of = 0;
@@ -530,14 +527,6 @@ void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     for (auto &seg : seg_info) {
         seg.overflow = calculate_overflow(rst, *seg.seg);
     }
-}
-
-void ripup(RoutingInst &rst, SegmentInfo &seg) {
-    for (int c = 0; c < seg.seg->numEdges; c++) {
-        ripup_edge(rst, *seg.net, seg.seg->edges[c]);
-    }
-    delete [] seg.seg->edges;
-    seg.seg->edges = nullptr;
 }
 
 void maze_route(RoutingInst &inst, Net *net, Segment *pSegment) {
