@@ -63,7 +63,7 @@ typedef std::unordered_map<Point, AStarDomainRecord> Domain;
 typedef std::priority_queue<AStarFrontierRecord> Frontier;
 
 inline int default_cost(const RoutingInst &inst, int edge) {
-    int newcost = inst.edge(edge).utilization + 1;
+    int newcost = inst.util(edge) + 1;
     if (newcost > inst.cap)
         newcost += (newcost - inst.cap) * OVERFLOW_EXPENSE;
     return newcost;

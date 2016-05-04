@@ -42,12 +42,12 @@ int writeCongestionSvg(const RoutingInst &inst, const char *filename) {
 
     for (int y = 0; y < inst.gy; y++) {
         for (int x = 0; x < inst.gx; x++) {
-            const Cell &cell = inst.cell(x, y);
+            const Cell &util = inst.util(x, y);
             if (x < inst.gx - 1) {
-                overflow += writeGridLine(f, x, y, x+1, y, cell.right.utilization, inst.cap);
+                overflow += writeGridLine(f, x, y, x+1, y, util.right, inst.cap);
             }
             if (y < inst.gy - 1) {
-                overflow += writeGridLine(f, x, y, x, y+1, cell.down.utilization, inst.cap);
+                overflow += writeGridLine(f, x, y, x, y+1, util.down, inst.cap);
             }
         }
     }

@@ -86,15 +86,11 @@ struct Net {
     std::unordered_map<int, int> routed_edges; // reference counted xD
 };
 
-struct Edge {
-    int utilization = 0;
-};
-
 // THE CODE DEPENDS ON THIS STRUCTURE FOR A CELL!!!
 // DO NOT MODIFY.
 struct Cell {
-    Edge right;
-    Edge down;
+    int right = 0;
+    int down = 0;
 };
 
 /**
@@ -110,7 +106,8 @@ struct RoutingInst {
     Net *nets = nullptr;		/* array of nets */
 
     int numCells = -1; 	/* number of cells in the grid */
-    Cell *cells = nullptr;
+    Cell *utilization = nullptr;
+    Cell *virtual_cap = nullptr;
 
     inline int index(const int x, const int y) const {
         // naive row-major scheme for now...
@@ -133,24 +130,42 @@ struct RoutingInst {
         return (edge >> 1) + ((edge & 1) ? gx : 1);
     }
 
-    inline Cell &cell(const int x, const int y) {
-        return cells[index(x, y)];
+    inline Cell &util(const int x, const int y) {
+        return utilization[index(x, y)];
     }
-    inline const Cell &cell(const int x, const int y) const {
-        return cells[index(x, y)];
+    inline const Cell &util(const int x, const int y) const {
+        return utilization[index(x, y)];
     }
-    inline Cell &cell(const Point &p) {
-        return cell(p.x, p.y);
+    inline Cell &util(const Point &p) {
+        return util(p.x, p.y);
     }
-    inline const Cell &cell(const Point &p) const {
-        return cell(p.x, p.y);
+    inline const Cell &util(const Point &p) const {
+        return util(p.x, p.y);
+    }
+    inline int &util(const int index) {
+        return reinterpret_cast<int *>(utilization)[index];
+    }
+    inline const int &util(const int index) const {
+        return reinterpret_cast<const int *>(utilization)[index];
     }
 
-    inline Edge &edge(const int index) {
-        return reinterpret_cast<Edge *>(cells)[index];
+    inline Cell &vcap(const int x, const int y) {
+        return virtual_cap[index(x, y)];
     }
-    inline const Edge &edge(const int index) const {
-        return reinterpret_cast<const Edge *>(cells)[index];
+    inline const Cell &vcap(const int x, const int y) const {
+        return virtual_cap[index(x, y)];
+    }
+    inline Cell &vcap(const Point &p) {
+        return vcap(p.x, p.y);
+    }
+    inline const Cell &vcap(const Point &p) const {
+        return vcap(p.x, p.y);
+    }
+    inline int &vcap(const int index) {
+        return reinterpret_cast<int *>(virtual_cap)[index];
+    }
+    inline const int &vcap(const int index) const {
+        return reinterpret_cast<const int *>(virtual_cap)[index];
     }
 
     inline bool valid(int x, int y) const {
@@ -163,7 +178,7 @@ struct RoutingInst {
 
     inline int overflow(const int edge_index) const {
         assert(valid(point_from_edge(edge_index)));
-        return std::max(edge(edge_index).utilization - cap, 0);
+        return std::max(util(edge_index) - cap, 0);
     }
 };
 
@@ -174,10 +189,8 @@ struct RoutingSolution {
     int numNets = -1;	/* number of nets */
     Net *nets = nullptr;		/* array of nets */
 
-#ifndef NDEBUG
     int numCells = -1; 	/* number of cells in the grid */
-    Cell *cells = nullptr;
-#endif
+    Cell *utilization = nullptr;
 
     inline void clone(const RoutingInst &other) {
         numNets = other.numNets;
@@ -186,13 +199,11 @@ struct RoutingSolution {
             nets[n].nroute = other.nets[n].nroute;
         }
 
-#ifndef NDEBUG
         numCells = other.numCells;
-        cells = new Cell[numCells];
+        utilization = new Cell[numCells];
         for (int c = 0; c < numCells; c++) {
-            cells[c] = other.cells[c];
+            utilization[c] = other.utilization[c];
         }
-#endif
     }
 
     inline void destroy() {
@@ -206,20 +217,16 @@ struct RoutingSolution {
             delete [] nets;
         }
 
-#ifndef NDEBUG
-        if (cells != nullptr) {
-            delete[] cells;
+        if (utilization != nullptr) {
+            delete[] utilization;
         }
-#endif
     }
 
     void restore(RoutingInst &other) {
         std::swap(numNets, other.numNets);
         std::swap(nets, other.nets);
-#ifndef NDEBUG
         std::swap(numCells, other.numCells);
-        std::swap(cells, other.cells);
-#endif
+        std::swap(utilization, other.utilization);
     }
 
     ~RoutingSolution() {
