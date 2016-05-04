@@ -61,5 +61,7 @@ clean:
 	rm -f *~ *.o ROUTE.exe
 
 cleanall: clean
+	cd libraries/flute-3.1 \
+	 && make clean
 	rm -rf include/
 	rm -rf obj/

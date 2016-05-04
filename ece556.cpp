@@ -31,6 +31,10 @@ using std::min;
 using std::max;
 using std::abs;
 
+const int FLUTE_SCALE = 10000;
+
+const bool useCongestionAwareInitial = false;
+const bool useCongestionAwareTreeGen = true;
 
 
 // ------------------------- readBenchmark --------------------------------
@@ -153,7 +157,7 @@ void readBenchmark(istream &in, RoutingInst &rst) {
 
 // ----------------------- Initial Solution ----------------------------
 
-void use_edge(RoutingInst &inst, Net &net, int edge) {
+inline void use_edge(RoutingInst &inst, Net &net, int edge) {
     auto result = net.routed_edges.emplace(edge, 1);
     if (result.second) {
         inst.util(edge)++;
@@ -162,7 +166,7 @@ void use_edge(RoutingInst &inst, Net &net, int edge) {
     }
 }
 
-void ripup_edge(RoutingInst &inst, Net &net, int edge) {
+inline void ripup_edge(RoutingInst &inst, Net &net, int edge) {
     auto result = net.routed_edges.find(edge);
     assert(result != net.routed_edges.end());
 
@@ -173,7 +177,8 @@ void ripup_edge(RoutingInst &inst, Net &net, int edge) {
     }
 }
 
-void L_route(RoutingInst &rst, Net &net, Segment &seg) {
+template<typename Util>
+void L_route(RoutingInst &rst, Net &net, Segment &seg, Util u) {
     int minX = min(seg.p1.x, seg.p2.x);
     int maxX = max(seg.p1.x, seg.p2.x);
     int minY = min(seg.p1.y, seg.p2.y);
@@ -183,12 +188,12 @@ void L_route(RoutingInst &rst, Net &net, Segment &seg) {
     int bxpy_cost = 0;
     int bypx_cost = 0;
     for (int x = minX; x < maxX; x++) {
-        bxpy_cost += rst.util(x, seg.p2.y).right;
-        bypx_cost += rst.util(x, seg.p1.y).right;
+        bxpy_cost += u(rst.edge_index(x, seg.p2.y, true));
+        bypx_cost += u(rst.edge_index(x, seg.p1.y, true));
     }
     for (int y = minY; y < maxY; y++) {
-        bxpy_cost += rst.util(seg.p1.x, y).down;
-        bypx_cost += rst.util(seg.p2.x, y).down;
+        bxpy_cost += u(rst.edge_index(seg.p1.x, y, false));
+        bypx_cost += u(rst.edge_index(seg.p2.x, y, false));
     }
 
     // allocate edge indices
@@ -222,6 +227,16 @@ void L_route(RoutingInst &rst, Net &net, Segment &seg) {
     }
     assert(edge == (seg.edges + numEdges));
 }
+void L_route(RoutingInst &rst, Net &net, Segment &seg) {
+    L_route(rst, net, seg, [&rst](int idx) -> int {return rst.util(idx);});
+}
+void L_route_all(RoutingInst &rst) {
+    for (int n = 0; n < rst.numNets; n++) {
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s]);
+        }
+    }
+}
 
 void routeInitialSolutionShitty(RoutingInst &rst) {
     // just L-route all of the segments
@@ -239,9 +254,27 @@ void routeInitialSolutionShitty(RoutingInst &rst) {
     }
 }
 
-void routeInitialSolution(RoutingInst &rst) {
-    // Use FLUTE to plot steiner trees for the initial solution
-    // Then L-route the steiner trees
+void make_segments(Net &net, Tree &tree) {
+    int maxNumCons = tree.deg*2 - 3;
+    int numSegs = 0;
+    net.nroute.segments = new Segment[maxNumCons];
+
+    for (int c = 0; c < tree.deg*2 - 2; c++) {
+        Branch &base = tree.branch[c];
+        if (base.n == c) continue;
+        Branch &parent = tree.branch[base.n];
+        if (base.x == parent.x && base.y == parent.y) continue;
+
+        net.nroute.segments[numSegs].p1 = Point{base.x, base.y};
+        net.nroute.segments[numSegs].p2 = Point{parent.x, parent.y};
+        numSegs++;
+    }
+
+    assert(numSegs <= maxNumCons);
+    net.nroute.numSegs = numSegs;
+}
+
+void flute_calculate_segments(RoutingInst &rst) {
     int xs[MAXD*2];
     int *ys = xs + MAXD;
 
@@ -254,34 +287,116 @@ void routeInitialSolution(RoutingInst &rst) {
 
         Tree tree = flute(rst.nets[n].numPins, xs, ys, ACCURACY);
 
-        int maxNumCons = tree.deg*2 - 3;
-        int numSegs = 0;
-        rst.nets[n].nroute.segments = new Segment[maxNumCons];
-
-        for (int c = 0; c < tree.deg*2 - 2; c++) {
-            Branch &base = tree.branch[c];
-            if (base.n == c) continue;
-            Branch &parent = tree.branch[base.n];
-            if (base.x == parent.x && base.y == parent.y) continue;
-
-            rst.nets[n].nroute.segments[numSegs].p1 = Point{base.x, base.y};
-            rst.nets[n].nroute.segments[numSegs].p2 = Point{parent.x, parent.y};
-            numSegs++;
-        }
-
-        assert(numSegs <= maxNumCons);
-
-        rst.nets[n].nroute.numSegs = numSegs;
-
-        for (int s = 0; s < numSegs; s++) {
-            L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s]);
-        }
+        make_segments(rst.nets[n], tree);
 
         free(tree.branch);
     }
 }
 
-// -------------------------- solveRouting ------------------------------
+void ripup_congestion(vector<int> &congestion, const RoutingInst &rst, const Segment &seg) {
+    int minx = min(seg.p1.x, seg.p2.x);
+    int maxx = max(seg.p1.x, seg.p2.x);
+    int miny = min(seg.p1.y, seg.p2.y);
+    int maxy = max(seg.p1.y, seg.p2.y);
+
+    if (miny == maxy) {
+        for (int x = minx; x < maxx; x++) {
+            congestion[rst.edge_index(x, miny, true)] -= 2; // count as both top and bottom
+        }
+    } else if (minx == maxx) {
+        for (int y = miny; y < maxy; y++) {
+            congestion[rst.edge_index(minx, y, false)] -= 2;
+        }
+    } else {
+        for (int x = minx; x < maxx; x++) {
+            congestion[rst.edge_index(x, miny, true)]--;
+            congestion[rst.edge_index(x, maxy, true)]--;
+        }
+        for (int y = miny; y < maxy; y++) {
+            congestion[rst.edge_index(minx, y, false)]--;
+            congestion[rst.edge_index(maxx, y, false)]--;
+        }
+    }
+}
+
+void setup_congestion(vector<int> &congestion, const RoutingInst &rst) {
+    for (int n = 0; n < rst.numNets; n++) {
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+
+            auto &seg = rst.nets[n].nroute.segments[s];
+
+            int minx = min(seg.p1.x, seg.p2.x);
+            int maxx = max(seg.p1.x, seg.p2.x);
+            int miny = min(seg.p1.y, seg.p2.y);
+            int maxy = max(seg.p1.y, seg.p2.y);
+
+            if (miny == maxy) {
+                for (int x = minx; x < maxx; x++) {
+                    congestion[rst.edge_index(x, miny, true)] += 2; // count as both top and bottom
+                }
+            } else if (minx == maxx) {
+                for (int y = miny; y < maxy; y++) {
+                    congestion[rst.edge_index(minx, y, false)] += 2;
+                }
+            } else {
+                for (int x = minx; x < maxx; x++) {
+                    congestion[rst.edge_index(x, miny, true)]++;
+                    congestion[rst.edge_index(x, maxy, true)]++;
+                }
+                for (int y = miny; y < maxy; y++) {
+                    congestion[rst.edge_index(minx, y, false)]++;
+                    congestion[rst.edge_index(maxx, y, false)]++;
+                }
+            }
+
+        }
+    }
+}
+
+void routeInitialSolutionCongestion(RoutingInst &rst) {
+    cout << "Using congestion estimation for initial solution" << endl;
+    flute_calculate_segments(rst);
+
+    vector<int> congestion; // ok, sometimes RAII is nice. But defer would be better!
+    congestion.resize(2UL * rst.gx * rst.gy, 0); // fill with 0
+
+    setup_congestion(congestion, rst);
+
+    // Do one round of 1-by-1 R&R using the congestion map
+    // Hopefully with the congestion map it's order invariant...
+    for (int n = 0; n < rst.numNets; n++) {
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            ripup_congestion(congestion, rst, rst.nets[n].nroute.segments[s]);
+
+            L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s],
+                    [&rst, &congestion](int idx) -> int {return congestion[idx] + 2*rst.util(idx);});
+        }
+    }
+}
+void routeInitialSolution(RoutingInst &rst) {
+    flute_calculate_segments(rst);
+    L_route_all(rst);
+}
+
+
+// -------------- rerouteCongestionAwareInitialSolution -----------------
+
+template<bool horz>
+int calculate_average_congestion(const RoutingInst &rst, int minx, int miny, int maxx, int maxy) {
+    if (maxx == minx || maxy == miny) return 0;
+
+    int total_congestion = 0;
+    for (int y = miny; y < maxy; y++) {
+        for (int x = minx; x < maxx; x++) {
+            total_congestion += rst.util(rst.edge_index(x, y, horz));
+        }
+    }
+
+    if (horz)
+        return (FLUTE_SCALE * total_congestion) / (rst.cap * (maxy - miny)) + 1;
+    else
+        return (FLUTE_SCALE * total_congestion) / (rst.cap * (maxx - minx)) + 1;
+}
 
 struct SegmentInfo {
     int overflow;
@@ -298,6 +413,108 @@ struct SegmentInfo {
         return *this;
     }
 };
+
+void ripup(RoutingInst &rst, const SegmentInfo &seg) {
+    for (int c = 0; c < seg.seg->numEdges; c++) {
+        ripup_edge(rst, *seg.net, seg.seg->edges[c]);
+    }
+    delete [] seg.seg->edges;
+    seg.seg->edges = nullptr;
+}
+
+void rerouteCongestionAwareInitialSolution(RoutingInst &rst) {
+    // TODO: This redoes a lot of the work that FLUTE does.
+    // If we need to make this faster, we can save off the sorted array and pass it into FLUTE.
+    // beware: this is a lot of memory (like 8 pages).  Hopefully it doesn't segfault or stack overflow.
+
+    // note MAXD = 800
+    int xs[MAXD];
+    int ys[MAXD];
+    int xp[MAXD];
+    int yp[MAXD];
+    int xscales[MAXD-1];
+    int yscales[MAXD-1];
+    int adjusted_xs[MAXD];
+    int adjusted_ys[MAXD];
+
+    for (int n = 0; n < rst.numNets; n++) {
+        int p;
+        for (p = 0; p < rst.nets[n].numPins; p++) {
+            xs[p] = rst.nets[n].pins[p].x;
+            ys[p] = rst.nets[n].pins[p].y;
+            xp[p] = p;
+            yp[p] = p;
+        }
+
+        // setup xp and yp as sorted permutations for x and y
+        std::sort(xp, xp+p, [xs](const int a, const int b) -> bool {return xs[a] < xs[b];});
+        std::sort(yp, yp+p, [ys](const int a, const int b) -> bool {return ys[a] < ys[b];});
+
+        // calculate the average congestion values to be used as scales
+        for (int c = 0; c < p-1; c++) {
+            xscales[c] = calculate_average_congestion<true>(rst, xs[xp[c]], ys[yp[0]], xs[xp[c+1]], ys[yp[p-1]]);
+            yscales[c] = calculate_average_congestion<false>(rst, xs[xp[0]], ys[yp[c]], xs[xp[p-1]], ys[yp[c+1]]);
+        }
+
+        // setup adjusted_xs and adjusted_ys as the warped points
+        int xPos = 0, yPos = 0;
+        for (int c = 0; c < p; c++) {
+            adjusted_xs[xp[c]] = xPos;
+            adjusted_ys[yp[c]] = yPos;
+            xPos += xscales[c];
+            yPos += yscales[c];
+        }
+
+        // calculate the steiner tree for the warped points
+        Tree t = flute(p, adjusted_xs, adjusted_ys, ACCURACY);
+
+        // now map that tree back onto the indexes.
+        // yeah, this is O(n^2). I can't think of a better way to do it.
+        xPos = 0;
+        yPos = 0;
+        for (int c = 0; c < p; c++) {
+            for (int d = 0; d < t.deg*2-2; d++) {
+                if (t.branch[d].x == xPos)
+                    t.branch[d].x = -c-1;
+                if (t.branch[d].y == yPos)
+                    t.branch[d].y = -c-1;
+            }
+
+            xPos += xscales[c];
+            yPos += yscales[c];
+        }
+
+
+
+        // then map those indexes onto the points
+        for (int d = 0; d < t.deg*2-2; d++) {
+            assert(t.branch[d].x < 0); // make sure we actually mapped all the points
+            assert(t.branch[d].y < 0);
+
+            t.branch[d].x = xs[xp[-t.branch[d].x-1]];
+            t.branch[d].y = ys[yp[-t.branch[d].y-1]];
+        }
+
+        // clear up the segments in the existing solution
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            ripup(rst, SegmentInfo(&rst.nets[n], &rst.nets[n].nroute.segments[s]));
+        }
+        delete [] rst.nets[n].nroute.segments;
+
+        // finally, map the tree onto segments.
+        make_segments(rst.nets[n], t);
+
+        // and route it
+        for (int s = 0; s < rst.nets[n].nroute.numSegs; s++) {
+            L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s]);
+        }
+
+        // and then clean up memory
+        free(t.branch);
+    }
+}
+
+// -------------------------- solveRouting ------------------------------
 
 inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
     int of = 0;
@@ -330,14 +547,6 @@ void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     for (auto &seg : seg_info) {
         seg.overflow = calculate_virtual_overflow(rst, *seg.seg);
     }
-}
-
-void ripup(RoutingInst &rst, SegmentInfo &seg) {
-    for (int c = 0; c < seg.seg->numEdges; c++) {
-        ripup_edge(rst, *seg.net, seg.seg->edges[c]);
-    }
-    delete [] seg.seg->edges;
-    seg.seg->edges = nullptr;
 }
 
 void maze_route(RoutingInst &inst, Net *net, Segment *pSegment) {
@@ -441,8 +650,13 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
     // find initial solution
     if (shitty_initial)
         routeInitialSolutionShitty(rst);
+    else if (useCongestionAwareInitial)
+        routeInitialSolutionCongestion(rst);
     else
         routeInitialSolution(rst);
+
+    if (useCongestionAwareTreeGen)
+        rerouteCongestionAwareInitialSolution(rst);
 
     // build array of all segments
     vector<SegmentInfo> seg_info;
