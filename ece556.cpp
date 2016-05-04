@@ -12,6 +12,9 @@
 
 extern "C" {
     #include <flute/flute.h>
+   #undef min
+   #undef max
+   #undef abs
 }
 
 
@@ -24,6 +27,9 @@ using std::stringstream;
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::min;
+using std::max;
+using std::abs;
 
 const int FLUTE_SCALE = 10000;
 
@@ -42,18 +48,24 @@ void setup_routing_inst(RoutingInst &inst, int gx, int gy, int cap, int nets) {
     inst.numCells = gx*gy;
 
     inst.nets = new Net[nets];
-    inst.cells = new Cell[gx*gy];
+    inst.utilization = new Cell[gx*gy];
+    inst.virtual_cap = new Cell[gx*gy];
+
+    for (int c = 0; c < gx*gy; c++) {
+        inst.virtual_cap[c].right = cap;
+        inst.virtual_cap[c].down = cap;
+    }
 }
 
 inline void apply_blockage(RoutingInst &inst, int x, int y, int ex, int ey, int new_cap) {
     if (x == ex) { // vertical
         for (; y < ey; y++) {
-            inst.cell(x, y).down.utilization = inst.cap - new_cap;
+            inst.util(x, y).down = inst.cap - new_cap;
         }
     } else {
         assert(y == ey);
         for (; x < ex; x++) {
-            inst.cell(x, y).right.utilization = inst.cap - new_cap;
+            inst.util(x, y).right = inst.cap - new_cap;
         }
     }
 }
@@ -148,7 +160,7 @@ void readBenchmark(istream &in, RoutingInst &rst) {
 inline void use_edge(RoutingInst &inst, Net &net, int edge) {
     auto result = net.routed_edges.emplace(edge, 1);
     if (result.second) {
-        inst.edge(edge).utilization++;
+        inst.util(edge)++;
     } else {
         result.first->second++;
     }
@@ -161,7 +173,7 @@ inline void ripup_edge(RoutingInst &inst, Net &net, int edge) {
     result->second--;
     if (result->second == 0) {
         net.routed_edges.erase(result);
-        inst.edge(edge).utilization--;
+        inst.util(edge)--;
     }
 }
 
@@ -177,11 +189,11 @@ void L_route(RoutingInst &rst, Net &net, Segment &seg, Util u) {
     int bypx_cost = 0;
     for (int x = minX; x < maxX; x++) {
         bxpy_cost += u(rst.edge_index(x, seg.p2.y, true));
-        bxpy_cost += u(rst.edge_index(x, seg.p1.y, true));
+        bypx_cost += u(rst.edge_index(x, seg.p1.y, true));
     }
     for (int y = minY; y < maxY; y++) {
         bxpy_cost += u(rst.edge_index(seg.p1.x, y, false));
-        bxpy_cost += u(rst.edge_index(seg.p2.x, y, false));
+        bypx_cost += u(rst.edge_index(seg.p2.x, y, false));
     }
 
     // allocate edge indices
@@ -216,7 +228,7 @@ void L_route(RoutingInst &rst, Net &net, Segment &seg, Util u) {
     assert(edge == (seg.edges + numEdges));
 }
 void L_route(RoutingInst &rst, Net &net, Segment &seg) {
-    L_route(rst, net, seg, [&rst](int idx) -> int {return rst.edge(idx).utilization;});
+    L_route(rst, net, seg, [&rst](int idx) -> int {return rst.util(idx);});
 }
 void L_route_all(RoutingInst &rst) {
     for (int n = 0; n < rst.numNets; n++) {
@@ -357,7 +369,7 @@ void routeInitialSolutionCongestion(RoutingInst &rst) {
             ripup_congestion(congestion, rst, rst.nets[n].nroute.segments[s]);
 
             L_route(rst, rst.nets[n], rst.nets[n].nroute.segments[s],
-                    [&rst, &congestion](int idx) -> int {return congestion[idx] + 2*rst.edge(idx).utilization;});
+                    [&rst, &congestion](int idx) -> int {return congestion[idx] + 2*rst.util(idx);});
         }
     }
 }
@@ -376,7 +388,7 @@ int calculate_average_congestion(const RoutingInst &rst, int minx, int miny, int
     int total_congestion = 0;
     for (int y = miny; y < maxy; y++) {
         for (int x = minx; x < maxx; x++) {
-            total_congestion += rst.edge(rst.edge_index(x, y, horz)).utilization;
+            total_congestion += rst.util(rst.edge_index(x, y, horz));
         }
     }
 
@@ -515,8 +527,8 @@ inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
 inline int calculate_total_overflow(const RoutingInst &rst) {
     int of = 0;
     for (int c = 0; c < rst.numCells; c++) {
-        of += max(0, rst.cells[c].right.utilization - rst.cap);
-        of += max(0, rst.cells[c].down.utilization - rst.cap);
+        of += max(0, rst.utilization[c].right - rst.cap);
+        of += max(0, rst.utilization[c].down - rst.cap);
     }
     return of;
 }
@@ -650,10 +662,21 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
     RoutingSolution currentBest;
     int currentBestOverflow;
 
+    time_t startTime = time(nullptr);
+    time_t lastTime = startTime; 
+    int currentOverflow = 0;
+    time_t currentTime = startTime;
     int overflow = calculate_total_overflow(rst);
+    int lastOverflow = overflow;
+    double timeChange = 0;
+    double overflowChange = 0;
+    double expectedQ = 0;
+    double currentQ = 0;
+    int secsIn15Min = 15*60;
+    int secsIn5Min = 5*60;
 
     int ruarr_iter = 0;
-    while(time_limit - time(nullptr) > 5*60) {
+    while(time_limit - time(nullptr) > 60) {
 #ifndef NDEBUG
         stringstream filename;
         filename << "intermediate-" << ruarr_iter << ".html";
@@ -663,6 +686,10 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
 
         ruarr_iter++;
 
+        if (ruarr_iter > 1) {
+            // update virtual capacity
+        }
+
         cout << "Overflow: " << overflow << endl;
         currentBestOverflow = overflow;
         currentBest.clone(rst);
@@ -671,10 +698,18 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
         ripupAndReroute(rst, seg_info, time_limit);
 
         overflow = calculate_total_overflow(rst);
-
+        currentTime = time(nullptr);
+        currentOverflow = overflow;
+        timeChange = (double)(currentTime - lastTime);
+        overflowChange = (double)(currentOverflow - lastOverflow);
+        currentQ = currentOverflow*(1 + ((currentTime - startTime)/secsIn15Min));
+        expectedQ = (currentOverflow + overflowChange)*(1 + ((currentTime - startTime + timeChange)/secsIn15Min));
         if (overflow >= currentBestOverflow) {
             cout << "Overflow no longer decreasing!" << endl;
             std::move(currentBest).restore(rst);
+            break;
+        }else if((expectedQ >= currentQ) && ((currentTime - startTime) >= secsIn5Min)){
+            cout << "Overflow not decreasing fast enough!" << endl;
             break;
         }
     }
