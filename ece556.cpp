@@ -184,11 +184,11 @@ void L_route(RoutingInst &rst, Net &net, Segment &seg) {
     int bypx_cost = 0;
     for (int x = minX; x < maxX; x++) {
         bxpy_cost += rst.util(x, seg.p2.y).right;
-        bxpy_cost += rst.util(x, seg.p1.y).right;
+        bypx_cost += rst.util(x, seg.p1.y).right;
     }
     for (int y = minY; y < maxY; y++) {
         bxpy_cost += rst.util(seg.p1.x, y).down;
-        bxpy_cost += rst.util(seg.p2.x, y).down;
+        bypx_cost += rst.util(seg.p2.x, y).down;
     }
 
     // allocate edge indices
