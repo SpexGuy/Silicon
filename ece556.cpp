@@ -438,6 +438,8 @@ void rerouteCongestionAwareInitialSolution(RoutingInst &rst) {
     int adjusted_ys[MAXD];
 
     for (int n = 0; n < rst.numNets; n++) {
+        if (rst.nets[n].numPins <= 2) continue;
+
         int p;
         for (p = 0; p < rst.nets[n].numPins; p++) {
             xs[p] = rst.nets[n].pins[p].x;
@@ -449,6 +451,10 @@ void rerouteCongestionAwareInitialSolution(RoutingInst &rst) {
         // setup xp and yp as sorted permutations for x and y
         std::sort(xp, xp+p, [xs](const int a, const int b) -> bool {return xs[a] < xs[b];});
         std::sort(yp, yp+p, [ys](const int a, const int b) -> bool {return ys[a] < ys[b];});
+
+        // no sense warping if only one axis
+        if (xs[xp[p-1]] == xs[xp[0]]) continue;
+        if (ys[yp[p-1]] == ys[yp[0]]) continue;
 
         // calculate the average congestion values to be used as scales
         for (int c = 0; c < p-1; c++) {
