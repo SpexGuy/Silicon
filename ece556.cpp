@@ -150,6 +150,59 @@ void readBenchmark(istream &in, RoutingInst &rst) {
 }
 
 
+// -------------------------- LZ Routing -------------------------------
+
+void LZ_route(RoutingInst &rst, Net &net, Segment &seg) {
+    int minX = min(seg.p1.x, seg.p2.x);
+    int maxX = max(seg.p1.x, seg.p2.x);
+    int minY = min(seg.p1.y, seg.p2.y);
+    int maxY = max(seg.p1.y, seg.p2.y);
+
+    int width = maxX - minX + 1;
+    int height = maxY - minY + 1;
+
+    int *horzcosts = new int[height];
+    int *vertcosts = new int[width];
+    int *sidecosts = new int[height*2];
+    int *topscosts = new int[width*2];
+
+    sidecosts[0] = 0;
+    sidecosts[height] = 0;
+    for (int y = 0; y < height-1; y++) {
+        sidecosts[1+y] = rst.util(minX, y + minY).down;
+        sidecosts[1+y+height] = rst.util(maxX, y + minY).down;
+    }
+
+    topscosts[0] = 0;
+    topscosts[width] = 0;
+    for (int x = 0; x < width-1; x++) {
+        topscosts[1+x] = rst.util(minX + x, minY).down;
+        topscosts[1+x+width] = rst.util(minX + x, maxY).down;
+    }
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            if (x != width-1)
+                horzcosts[y] += rst.util(x + minX, y + minY).right;
+            if (y != height-1)
+                vertcosts[x] += rst.util(x + minX, y + minY).down;
+        }
+    }
+
+    bool bestHorz = true;
+    int bestDiv = 0;
+    int bestCost = std::numeric_limits<int>::max();
+
+    for (int x = 0; x < width; x++) {
+        //TODO: LZ-route
+    }
+
+    delete [] horzcosts;
+    delete [] vertcosts;
+    delete [] sidecosts;
+    delete [] topscosts;
+}
+
 
 // ----------------------- Initial Solution ----------------------------
 
