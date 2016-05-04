@@ -257,17 +257,17 @@ void three_bend_route(RoutingInst &rst, Net &net, Segment &seg) {
     bool bestFirst, bestThird;
     for (int y = 0; y < numY; y++) {
         for (int x = 0; x < numX; x++) {
-           int costFirst = abs(cells[seg.p1.x + (numX * seg.p1.y)].right - cells[x + (numX * seg.p1.y)].right) 
-                       + abs(cells[x + (numX *seg.p1.y)].down - cells[x + (numX * y)].down);
+           int costFirst = abs(cells[seg.p1.x-minX + (numX * (seg.p1.y-minY))].right - cells[x + (numX * (seg.p1.y-minY))].right)
+                       + abs(cells[x + (numX * (seg.p1.y-minY))].down - cells[x + (numX * y)].down);
 
-           int costSecond = abs(cells[seg.p1.x + (numX * seg.p1.y)].right - cells[seg.p1.x + (numX * y)].right)
-                       + abs(cells[seg.p1.x + (numX * y)].down - cells[x + (numX * y)].down); 
+           int costSecond = abs(cells[seg.p1.x-minX + (numX * (seg.p1.y-minY))].right - cells[seg.p1.x-minX + (numX * y)].right)
+                       + abs(cells[seg.p1.x-minX + (numX * y)].down - cells[x + (numX * y)].down);
             
-           int costThird = abs(cells[seg.p2.x + (numX * seg.p2.y)].right - cells[x + (numX * seg.p2.y)].right)
-                       + abs(cells[x + (numX * seg.p2.y)].down - cells[x + (numX * y)].down); 
+           int costThird = abs(cells[seg.p2.x-minX + (numX * (seg.p2.y-minY))].right - cells[x + (numX * (seg.p2.y-minY))].right)
+                       + abs(cells[x + (numX * (seg.p2.y-minY))].down - cells[x + (numX * y)].down);
 
-           int costFourth = abs(cells[seg.p2.x + (numX * seg.p2.y)].right - cells[seg.p2.x + (numX * y)].right)
-                       + abs(cells[seg.p2.x + (numX * y)].down - cells[x + (numX * y)].down); 
+           int costFourth = abs(cells[seg.p2.x-minX + (numX * (seg.p2.y-minY))].right - cells[seg.p2.x-minX + (numX * y)].right)
+                       + abs(cells[seg.p2.x-minX + (numX * y)].down - cells[x + (numX * y)].down);
            
            bool first = costFirst < costSecond;
            bool third = costThird < costFourth;
@@ -284,7 +284,8 @@ void three_bend_route(RoutingInst &rst, Net &net, Segment &seg) {
     }
 
     // route through bestX, bestY using first/second and third/fourth for bestCost cost
-    
+    bestX += minX;
+    bestY += minY;
     int numEdges = seg.numEdges = abs(seg.p1.x-bestX)+abs(seg.p1.y-bestY) +
                                   abs(seg.p2.x-bestX)+abs(seg.p2.y-bestY);
     int *edge = seg.edges = new int[numEdges];
