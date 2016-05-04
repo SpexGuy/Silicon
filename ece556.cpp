@@ -33,7 +33,7 @@ using std::abs;
 
 const int FLUTE_SCALE = 10000;
 
-const bool useCongestionAwareInitial = false;
+const bool useCongestionAwareInitial = true;
 const bool useCongestionAwareTreeGen = true;
 
 
