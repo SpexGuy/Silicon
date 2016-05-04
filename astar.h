@@ -64,8 +64,8 @@ typedef std::priority_queue<AStarFrontierRecord> Frontier;
 
 inline int default_cost(const RoutingInst &inst, int edge) {
     int newcost = inst.util(edge) + 1;
-    if (newcost > inst.cap)
-        newcost += (newcost - inst.cap) * OVERFLOW_EXPENSE;
+    if (newcost > inst.vcap(edge))
+      newcost += (newcost - inst.vcap(edge)) * OVERFLOW_EXPENSE;
     return newcost;
 }
 

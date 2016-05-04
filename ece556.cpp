@@ -307,6 +307,14 @@ inline int calculate_overflow(const RoutingInst &rst, const Segment &seg) {
     return of;
 }
 
+inline int calculate_virtual_overflow(const RoutingInst &rst, const Segment &seg) {
+  int of = 0;
+  for (int c = 0; c < seg.numEdges; c++) {
+    of += max(0, rst.util(seg.edges[c]) - rst.vcap(seg.edges[c]));
+  }
+  return of;
+}
+
 inline int calculate_total_overflow(const RoutingInst &rst) {
     int of = 0;
     for (int c = 0; c < rst.numCells; c++) {
@@ -320,7 +328,7 @@ void init_overflow(const RoutingInst &rst, vector<SegmentInfo> &seg_info) {
     // TODO: iteration like this shits all over the L2 cache
     // (because seg.seg is a ptr and they may be all out of order)
     for (auto &seg : seg_info) {
-        seg.overflow = calculate_overflow(rst, *seg.seg);
+        seg.overflow = calculate_virtual_overflow(rst, *seg.seg);
     }
 }
 
@@ -473,7 +481,16 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
         ruarr_iter++;
 
         if (ruarr_iter > 1) {
-            // update virtual capacity
+	  // update virtual capacity
+	  for(int c = 0; c < rst.gx*rst.gy; c++) {
+	    int capacity = rst.cap;
+	    int utilRight = rst.utilization[c].right;
+	    int utilDown = rst.utilization[c].down;
+	    int overflowRight = utilRight - capacity;
+	    int overflowDown = utilDown - capacity;
+	    rst.virtual_cap[c].right = min(rst.virtual_cap[c].right - overflowRight, capacity);
+	    rst.virtual_cap[c].down = min(rst.virtual_cap[c].down - overflowDown, capacity);
+	  }
         }
 
         cout << "Overflow: " << overflow << endl;
