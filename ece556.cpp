@@ -223,6 +223,132 @@ void L_route(RoutingInst &rst, Net &net, Segment &seg) {
     assert(edge == (seg.edges + numEdges));
 }
 
+
+void three_bend_route(RoutingInst &rst, Net &net, Segment &seg) {
+    
+    const int margin = 10;
+    int minX = min(seg.p1.x, seg.p2.x) - margin;
+    int maxX = max(seg.p1.x, seg.p2.x) + margin;
+    int minY = min(seg.p1.y, seg.p2.y) - margin;
+    int maxY = max(seg.p1.y, seg.p2.y) + margin;
+    int numX = maxX - minX + 1;
+    int numY = maxY - minY + 1;
+
+    Cell *cells = new Cell[numX * numY];
+    
+    // Calculate Costs 
+    for (int y = 0; y < numY; y++) {
+        for (int x = 0; x < numX; x++) {
+            // Horizonal Cost
+            if(x != 0) {
+                cells[x + (numX*y)].right = rst.util(x+minX-1,y+minY).right + cells[x-1 +(numX*y)].right;
+            }
+
+            // Vertical
+            if (y != 0) {
+                cells[x + (numX*y)].down = rst.util(x+minX,y+minY-1).down + cells[x + (numX*(y-1))].down;
+            }
+        }
+    }
+
+    // Calculate cost of four possible 3 bend paths
+    int bestX, bestY;
+    int bestCost = std::numeric_limits<int>::max();
+    bool bestFirst, bestThird;
+    for (int y = 0; y < numY; y++) {
+        for (int x = 0; x < numX; x++) {
+           int costFirst = abs(cells[seg.p1.x + (numX * seg.p1.y)].right - cells[x + (numX * seg.p1.y)].right) 
+                       + abs(cells[x + (numX *seg.p1.y)].down - cells[x + (numX * y)].down);
+
+           int costSecond = abs(cells[seg.p1.x + (numX * seg.p1.y)].right - cells[seg.p1.x + (numX * y)].right)
+                       + abs(cells[seg.p1.x + (numX * y)].down - cells[x + (numX * y)].down); 
+            
+           int costThird = abs(cells[seg.p2.x + (numX * seg.p2.y)].right - cells[x + (numX * seg.p2.y)].right)
+                       + abs(cells[x + (numX * seg.p2.y)].down - cells[x + (numX * y)].down); 
+
+           int costFourth = abs(cells[seg.p2.x + (numX * seg.p2.y)].right - cells[seg.p2.x + (numX * y)].right)
+                       + abs(cells[seg.p2.x + (numX * y)].down - cells[x + (numX * y)].down); 
+           
+           bool first = costFirst < costSecond;
+           bool third = costThird < costFourth;
+           int totalCost = min(costFirst, costSecond) + min(costThird, costFourth);
+           if (totalCost < bestCost) {
+               bestX = x;
+               bestY = y;
+               bestCost = totalCost;
+               bestFirst = first;
+               bestThird = third;
+           }
+
+        }
+    }
+
+    // route through bestX, bestY using first/second and third/fourth for bestCost cost
+    
+    int numEdges = seg.numEdges = abs(seg.p1.x-bestX)+abs(seg.p1.y-bestY) +
+                                  abs(seg.p2.x-bestX)+abs(seg.p2.y-bestY);
+    int *edge = seg.edges = new int[numEdges];
+
+    minX = min(seg.p1.x, bestX);
+    maxX = max(seg.p1.x, bestX);
+    minY = min(seg.p1.y, bestY);
+    maxY = max(seg.p1.y, bestY);
+    if (bestFirst) {
+        for (int x = minX; x < maxX; x++) {
+            *edge = rst.edge_index(x, seg.p1.y, true);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+        for (int y = minY; y < maxY; y++) {
+            *edge = rst.edge_index(bestX, y, false);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+    } else {
+        for (int x = minX; x < maxX; x++) {
+            *edge = rst.edge_index(x, bestY, true);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+        for (int y = minY; y < maxY; y++) {
+            *edge = rst.edge_index(seg.p1.x, y, false);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+    }
+
+    minX = min(seg.p2.x, bestX);
+    maxX = max(seg.p2.x, bestX);
+    minY = min(seg.p2.y, bestY);
+    maxY = max(seg.p2.y, bestY);
+    if (bestThird) {
+        for (int x = minX; x < maxX; x++) {
+            *edge = rst.edge_index(x, seg.p2.y, true);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+        for (int y = minY; y < maxY; y++) {
+            *edge = rst.edge_index(seg.p1.x, y, false);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+    } else {
+        for (int x = minX; x < maxX; x++) {
+            *edge = rst.edge_index(x, seg.p2.y, true);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+        for (int y = minY; y < maxY; y++) {
+            *edge = rst.edge_index(bestX, y, false);
+            use_edge(rst, net, *edge);
+            edge++;
+        }
+    }
+
+    assert(edge == (seg.edges + numEdges));
+}
+
+
 void routeInitialSolutionShitty(RoutingInst &rst) {
     // just L-route all of the segments
     for (int n = 0; n < rst.numNets; n++) {
