@@ -346,6 +346,7 @@ void three_bend_route(RoutingInst &rst, Net &net, Segment &seg) {
     }
 
     assert(edge == (seg.edges + numEdges));
+    delete [] cells;
 }
 
 
@@ -525,7 +526,7 @@ void ripupAndReroute(RoutingInst &rst, vector<SegmentInfo> &seg_info, time_t tim
             if (!panicked) { // hurray for branch prediction!
                 routed_count++;
 
-                maze_route(rst, info.net, info.seg);
+                three_bend_route(rst, *info.net, *info.seg);
 
                 // check time remaining
                 time_t now = time(nullptr);
