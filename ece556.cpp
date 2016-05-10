@@ -31,7 +31,7 @@ using std::min;
 using std::max;
 using std::abs;
 
-const int FLUTE_SCALE = 10000;
+const int FLUTE_SCALE = 10000UL;
 
 const bool useCongestionAwareInitial = false;
 const bool useCongestionAwareTreeGen = true;
@@ -383,19 +383,20 @@ void routeInitialSolution(RoutingInst &rst) {
 
 template<bool horz>
 int calculate_average_congestion(const RoutingInst &rst, int minx, int miny, int maxx, int maxy) {
-    if (maxx == minx || maxy == miny) return 0;
+    if ( horz && maxx == minx) return 0;
+    if (!horz && maxy == miny) return 0;
 
-    int total_congestion = 0;
-    for (int y = miny; y < maxy; y++) {
-        for (int x = minx; x < maxx; x++) {
+    unsigned long total_congestion = 0;
+    for (int y = miny; y < maxy + horz; y++) {
+        for (int x = minx; x < maxx + !horz; x++) {
             total_congestion += rst.util(rst.edge_index(x, y, horz));
         }
     }
 
     if (horz)
-        return (FLUTE_SCALE * total_congestion) / (rst.cap * (maxy - miny)) + 1;
+        return int((FLUTE_SCALE * total_congestion) / (rst.cap * (maxy - miny + 1))) + 1;
     else
-        return (FLUTE_SCALE * total_congestion) / (rst.cap * (maxx - minx)) + 1;
+        return int((FLUTE_SCALE * total_congestion) / (rst.cap * (maxx - minx + 1))) + 1;
 }
 
 struct SegmentInfo {
@@ -438,6 +439,9 @@ void rerouteCongestionAwareInitialSolution(RoutingInst &rst) {
     int adjusted_ys[MAXD];
 
     for (int n = 0; n < rst.numNets; n++) {
+        if (n == 63052) {
+            n = n;
+        }
         int p;
         for (p = 0; p < rst.nets[n].numPins; p++) {
             xs[p] = rst.nets[n].pins[p].x;
@@ -654,9 +658,16 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
         routeInitialSolutionCongestion(rst);
     else
         routeInitialSolution(rst);
+    cout << "Verifying initial solution..." << endl;
+    rst.verify();
+    cout << "Done\n" << endl;
 
-    if (useCongestionAwareTreeGen)
+    if (useCongestionAwareTreeGen) {
         rerouteCongestionAwareInitialSolution(rst);
+        cout << "Verifying rerouted initial solution..." << endl;
+        rst.verify();
+        cout << "Done\n" << endl;
+    }
 
     // build array of all segments
     vector<SegmentInfo> seg_info;
@@ -730,6 +741,10 @@ void solveRouting(RoutingInst &rst, time_t time_limit, bool shitty_initial) {
             break;
         }
     }
+
+    cout << "Verifying final solution..." << endl;
+    rst.verify();
+    cout << "Done\n" << endl;
 }
 
 

@@ -28,6 +28,16 @@ inline std::ostream &operator<<(std::ostream &out, const Point &p) {
     return out << '(' << p.x << ',' << p.y << ')';
 }
 
+// For std::unordered_map<Point, ...>
+namespace std {
+    template<>
+    struct hash<Point> {
+        inline size_t operator()(const Point &p) const {
+            return hash<int>()(p.x) ^ hash<int>()(p.y);
+        }
+    };
+}
+
 
 /**
  * A structure to represent a segment
@@ -179,6 +189,27 @@ struct RoutingInst {
     inline int overflow(const int edge_index) const {
         assert(valid(point_from_edge(edge_index)));
         return std::max(util(edge_index) - cap, 0);
+    }
+
+    void verify() const {
+        for (int n = 0; n < numNets; n++) {
+            std::unordered_set<Point> points;
+            for (int p = 0; p < nets[n].numPins; p++) {
+                points.emplace(nets[n].pins[p]);
+            }
+
+            for (int s = 0; s < nets[n].nroute.numSegs; s++) {
+                points.erase(nets[n].nroute.segments[s].p1);
+                points.erase(nets[n].nroute.segments[s].p2);
+            }
+
+            if (!points.empty()) {
+                std::cerr << "Net " << n << " is not fully connected!" << std::endl;
+                for (const Point &p : points) {
+                    std::cerr << "    " << p << std::endl;
+                }
+            }
+        }
     }
 };
 

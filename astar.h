@@ -49,16 +49,6 @@ struct AStarDomainRecord {
     {}
 };
 
-// For std::unordered_map<Point, ...>
-namespace std {
-    template<>
-    struct hash<Point> {
-        inline size_t operator()(const Point &p) const {
-            return hash<int>()(p.x) ^ hash<int>()(p.y);
-        }
-    };
-}
-
 typedef std::unordered_map<Point, AStarDomainRecord> Domain;
 typedef std::priority_queue<AStarFrontierRecord> Frontier;
 
